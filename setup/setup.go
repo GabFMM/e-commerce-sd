@@ -87,13 +87,3 @@ func main() {
 	}
 	log.Println(" [LOG] Setup concluído com sucesso.")
 }
-
-// Listar exchanges
-// sudo rabbitmqctl list_exchanges name type
-
-// Listar filas (nome e quantidade de mensagens)
-// sudo rabbitmqctl list_queues name messages
-
-// Litar bindings
-// sudo rabbitmqctl list_bindings
-//Eu vi em uma interface visual que o rabbit tem tambem legal
