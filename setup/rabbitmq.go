@@ -71,7 +71,7 @@ func ConfigurarFilas() {
 		if err != nil {
 			log.Panicf("%s: %s", "[ERRO] Falha ao declarar a fila: "+fila.NomeQueue, err)
 		}
-		log.Printf(" [LOG] Queue %q declarada", queue.Name)
+		log.Printf("[LOG] Queue %q declarada", queue.Name)
 
 		//Dentro do loop de filas um loop para bindar as routing keys e o exchange
 		for _, routKey := range fila.RoutingKeys {

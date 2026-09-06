@@ -13,12 +13,12 @@ docker run -d \
   rabbitmq:4-management
 ```
 
-2. Crie as chaves privadas e públicas para cada microsserviço
+2. Prepare o ambiente com as configurações necessárias
 ```
-go run ./seguranca/gerar-chaves
+go run ./setup/main iniciar
 ```
 
-3. Configure as filas do RabbitMQ
+3. Após utilizar o sistema de e-commerce, remova os dados do banco
 ```
-go run ./setup
+go run ./setup/main encerrar
 ```
