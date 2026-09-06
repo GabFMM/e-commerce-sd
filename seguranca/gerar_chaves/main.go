@@ -1,5 +1,4 @@
-// Rodar UMA VEZ, antes de subir qualquer microsserviço.
-// Uso: go run gerar_chaves.go
+// Rodar UMA VEZ, antes de subir qualquer microsserviço
 package main
 
 import (
