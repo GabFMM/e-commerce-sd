@@ -1,13 +1,11 @@
 // Rodar UMA VEZ, antes de subir qualquer microsserviço
-package main
+package seguranca
 
 import (
 	"fmt"
 	"io"
 	"log"
 	"os"
-
-	"e-commerce-sd/seguranca"
 )
 
 func copiarArquivo(origem, destino string) error {
@@ -39,18 +37,18 @@ var nomesServicos = []string{
 
 // pastaChavesDoServico monta o caminho da pasta "chaves" de um serviço,
 // assumindo que este script roda a partir de "gerar-chaves/" e que
-// cada microsserviço mora em "../ms-<nome>".
+// cada microsserviço mora em "ms-<nome>/".
 func pastaChavesDoServico(nomeServico string) string {
 	return fmt.Sprintf("../../ms-%s/chaves", nomeServico)
 }
 
-func main() {
+func GerarChaves() {
 	// Gera o par de chaves de cada microsserviço, direto dentro
 	// da sua própria pasta "chaves/" (assim a privada já nasce no
 	// lugar certo e nunca precisa ser copiada para lugar nenhum).
 	for _, nome := range nomesServicos {
 		pasta := pastaChavesDoServico(nome)
-		if err := seguranca.GerarEGuardarChaves(pasta, nome); err != nil {
+		if err := GerarEGuardarChaves(pasta, nome); err != nil {
 			log.Fatalf("falha ao gerar chaves de %q: %v", nome, err)
 		}
 	}
