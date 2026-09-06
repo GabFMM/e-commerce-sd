@@ -14,11 +14,20 @@ Armazena os produtos disponíveis no estoque.
 
 ### Tabela: `pedidos`
 
-Armazena os pedidos recebidos pelo microsserviço Estoque, permitindo manter o estado necessário para controlar as reservas realizadas.
+Armazena os pedidos criados e atualizados no ms-principal.
 
 **Colunas:**
 
 * `id` — `serial`, **PRIMARY KEY**
+* `status` - `varchar()`, **NOT NULL**, com valores permitidos `CRIADO`, `ESTOQUE_DISPONIVEL`, `ESTOQUE_INDISPONIVEL`, `PAGAMENTO_APROVADO`, `PAGAMENTO_RECUSADO` ou `ENVIADO`
+
+**Explicação dos status:**
+- `CRIADO`: o pedido foi criado e foi encaminhado para o ms-estoque;
+- `ESTOQUE_DISPONIVEL`: o estoque possui a quantidade requisitida de cada produto no pedido; e foi encaminhado para o ms-pagamento;
+- `ESTOQUE_INDISPONIVEL`: o estoque não possui a quantidade requisitida de um dos produtos no pedido; e foi encaminhado para o ms-principal;
+- `PAGAMENTO_APROVADO`: o pagamento do pedido foi aprovado e foi encaminhado para o ms-entrega;
+- `PAGAMENTO_RECUSADO`: o pagamento do pedido foi recusado e foi encaminhado para o ms-principal;
+- `ENVIADO`: o pedido foi enviado para o usuário e foi encaminhado para o ms-principal.
 
 ### Tabela: `pedidos_produtos`
 
@@ -34,8 +43,6 @@ A chave primária da tabela será composta por `pedido_id` e `produto_id`.
 
 ### Relacionamentos
 
-* Um **pedido** pode possuir vários **itens**.
+* Um **pedido** pode possuir vários **produtos**.
 * Um **produto** pode estar presente em vários **pedidos**.
-* A tabela `itens_pedido` representa o relacionamento **N:N** entre `pedidos` e `produtos`.
-
-Essa estrutura permite que o microsserviço Estoque registre quais produtos foram reservados para cada pedido. Dessa forma, caso seja recebido posteriormente um evento `pedido.excluido`, o serviço poderá identificar as quantidades anteriormente reservadas e devolvê-las ao estoque.
+* A tabela `pedidos_produtos` representa o relacionamento **N:M** entre `pedidos` e `produtos`.
