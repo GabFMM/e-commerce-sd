@@ -1,9 +1,9 @@
 // Arquivo para configurar as filas, routing keys e a exchange, dai cada microsserviço vai ter que
 // enviar e consumir, enviar direto para a exchange e consumir de alguma fila especifica
 
-package main
+package setup
 
-import (
+import(
 	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -24,25 +24,22 @@ var Filas = []QueueRoutingKeys{
 
 const NomeExchange = "eCommerce"
 
-func failOnError(err error, msg string) {
-	if err != nil {
-		log.Panicf("%s: %s", msg, err)
-	}
-}
-
-func main() {
-
+func ConfigurarFilas() {
 	//Aqui foi só um teste ver se tava certo a struct
 	// for _, routing := range Filas {
 	// 	log.Printf("%s: %s", routing.NomeQueue, routing.RoutingKeys)
 	// }
 
 	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
-	failOnError(err, "[ERRO] Erro ao criar conexão com servidor local do amqp")
+	if err != nil {
+		log.Panicf("%s: %s", "[ERRO] Erro ao criar conexão com servidor local do amqp", err)
+	}
 	defer conn.Close()
 
 	ch, err := conn.Channel()
-	failOnError(err, "[ERRO] Erro ao criar channel com o servidor")
+	if err != nil {
+		log.Panicf("%s: %s", "[ERRO] Erro ao criar channel com o servidor", err)
+	}
 	defer ch.Close()
 
 	//Declarar a exchange e manter ela duravel
@@ -56,7 +53,9 @@ func main() {
 		nil,
 	)
 
-	failOnError(err, "[ERRO] Falha ao declarar a exchange")
+	if err != nil {
+		log.Panicf("%s: %s", "[ERRO] Falha ao declarar a exchange", err)
+	}
 	log.Printf("[LOG] Exchange %q declarada", NomeExchange)
 
 	//Loop para criar as filas
@@ -69,8 +68,10 @@ func main() {
 			false,
 			nil,
 		)
-		failOnError(err, "[ERRO] Falha ao declarar a fila: "+fila.NomeQueue)
-		log.Printf(" [LOG] Queue %q declarada", queue.Name)
+		if err != nil {
+			log.Panicf("%s: %s", "[ERRO] Falha ao declarar a fila: "+fila.NomeQueue, err)
+		}
+		log.Printf("[LOG] Queue %q declarada", queue.Name)
 
 		//Dentro do loop de filas um loop para bindar as routing keys e o exchange
 		for _, routKey := range fila.RoutingKeys {
@@ -81,9 +82,10 @@ func main() {
 				false,
 				nil,
 			)
-			failOnError(err, "[ERRO] Falha ao bindar "+queue.Name+" com a routing key "+routKey)
+			if err != nil {
+				log.Panicf("%s: %s", "[ERRO] Falha ao bindar "+queue.Name+" com a routing key "+routKey, err)
+			}
 			log.Printf("     -> bind com routing key %q", routKey)
 		}
 	}
-	log.Println(" [LOG] Setup concluído com sucesso.")
 }
