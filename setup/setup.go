@@ -16,10 +16,10 @@ type QueueRoutingKeys struct {
 }
 
 var Filas = []QueueRoutingKeys{
-	{NomeQueue: "estoque", RoutingKeys: []string{"pedido_criado", "pedido_excluido"}},
-	{NomeQueue: "principal", RoutingKeys: []string{"pedido_estoque_ok", "estoque_indisponivel", "pagamento_aprovado", "pagamento_reprovado", "pedido_enviado"}},
-	{NomeQueue: "pagamento", RoutingKeys: []string{"pedido_estoque_ok"}},
-	{NomeQueue: "entrega", RoutingKeys: []string{"pagamento_aprovado"}},
+	{NomeQueue: "estoque", RoutingKeys: []string{"pedido.criado", "pedido.excluido"}},
+	{NomeQueue: "principal", RoutingKeys: []string{"pedido.estoque_ok", "estoque.indisponivel", "pagamento.aprovado", "pagamento.recusado", "pedido.enviado"}},
+	{NomeQueue: "pagamento", RoutingKeys: []string{"pedido.estoque_ok"}},
+	{NomeQueue: "entrega", RoutingKeys: []string{"pagamento.aprovado"}},
 }
 
 const NomeExchange = "eCommerce"
@@ -38,11 +38,11 @@ func main() {
 	// }
 
 	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
-	failOnError(err, "Erro ao criar conexão com servidor local do amqp")
+	failOnError(err, "[ERRO] Erro ao criar conexão com servidor local do amqp")
 	defer conn.Close()
 
 	ch, err := conn.Channel()
-	failOnError(err, "Erro ao criar channel com o servidor")
+	failOnError(err, "[ERRO] Erro ao criar channel com o servidor")
 	defer ch.Close()
 
 	//Declarar a exchange e manter ela duravel
@@ -56,7 +56,7 @@ func main() {
 		nil,
 	)
 
-	failOnError(err, "Falha ao declarar a exchange")
+	failOnError(err, "[ERRO] Falha ao declarar a exchange")
 	log.Printf("[LOG] Exchange %q declarada", NomeExchange)
 
 	//Loop para criar as filas
@@ -69,10 +69,10 @@ func main() {
 			false,
 			nil,
 		)
-		failOnError(err, "Falha ao declarar a fila: "+fila.NomeQueue)
-		log.Printf(" [x] Queue %q declarada", queue.Name)
+		failOnError(err, "[ERRO] Falha ao declarar a fila: "+fila.NomeQueue)
+		log.Printf(" [LOG] Queue %q declarada", queue.Name)
 
-		//Dentro do loop de filas um loop para bindar as routing keys
+		//Dentro do loop de filas um loop para bindar as routing keys e o exchange
 		for _, routKey := range fila.RoutingKeys {
 			err = ch.QueueBind(
 				queue.Name,
@@ -81,11 +81,11 @@ func main() {
 				false,
 				nil,
 			)
-			failOnError(err, "Falha ao bindar "+queue.Name+" com a routing key "+routKey)
+			failOnError(err, "[ERRO] Falha ao bindar "+queue.Name+" com a routing key "+routKey)
 			log.Printf("     -> bind com routing key %q", routKey)
 		}
 	}
-	log.Println(" [x] Setup concluído com sucesso.")
+	log.Println(" [LOG] Setup concluído com sucesso.")
 }
 
 // Listar exchanges
