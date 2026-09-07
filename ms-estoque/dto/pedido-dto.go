@@ -1,5 +1,5 @@
 package dto
 
 type PedidoDTO struct {
-	Id int `json:"id"`
+	Id int `json:"pedido_id"`
 }
