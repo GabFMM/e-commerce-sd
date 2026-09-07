@@ -2,6 +2,31 @@
 
 **Banco de dados:** PostgreSQL
 
+### Visualização
+
+   +-------------------+                     +-------------------+ 
+   |     produtos      |                     |      pedidos      | 
+   +-------------------+                     +-------------------+ 
+   | PK  id            |                     | PK  id            | 
+   |     categoria     |                     |     situacao      | 
+   |     quantidade    |                     +-------------------+ 
+   |     reservados    |                               | 1
+   +-------------------+                               |
+             | 1                                       |
+             |                                         |
+             |               (1:N)                     | (1:N)
+             +-------------------++--------------------+
+                                 ||
+                                 \/
+                       +--------------------+
+                       |  pedidos_produtos  |
+                       +--------------------+
+                       | PK,FK1  pedido_id  |
+                       | PK,FK2  produto_id |
+                       |         quantidade |
+                       +--------------------+
+
+
 ### Tabela: `produtos`
 
 Armazena os produtos disponíveis no estoque.
@@ -11,6 +36,7 @@ Armazena os produtos disponíveis no estoque.
 * `id` — `serial`, **PRIMARY KEY**
 * `categoria` — `char(1)`, **NOT NULL**, com valores permitidos `A`, `B` ou `C`
 * `quantidade` — `integer`, **NOT NULL**, com valor mínimo igual a `0`
+* `reservados` — `integer`, **DEFAULT 0**, com valor mínimo igual a `0`
 
 ### Tabela: `pedidos`
 
@@ -19,9 +45,9 @@ Armazena os pedidos criados e atualizados no ms-principal.
 **Colunas:**
 
 * `id` — `serial`, **PRIMARY KEY**
-* `status` - `varchar()`, **NOT NULL**, com valores permitidos `CRIADO`, `ESTOQUE_DISPONIVEL`, `ESTOQUE_INDISPONIVEL`, `PAGAMENTO_APROVADO`, `PAGAMENTO_RECUSADO` ou `ENVIADO`
+* `situacao` - `varchar()`, **NOT NULL**, com valores permitidos `CRIADO`, `ESTOQUE_DISPONIVEL`, `ESTOQUE_INDISPONIVEL`, `PAGAMENTO_APROVADO`, `PAGAMENTO_RECUSADO` ou `ENVIADO`
 
-**Explicação dos status:**
+**Explicação das situacoes:**
 - `CRIADO`: o pedido foi criado e foi encaminhado para o ms-estoque;
 - `ESTOQUE_DISPONIVEL`: o estoque possui a quantidade requisitida de cada produto no pedido; e foi encaminhado para o ms-pagamento;
 - `ESTOQUE_INDISPONIVEL`: o estoque não possui a quantidade requisitida de um dos produtos no pedido; e foi encaminhado para o ms-principal;
@@ -36,7 +62,7 @@ Relaciona os pedidos aos produtos e registra a quantidade de cada produto reserv
 **Colunas:**
 
 * `pedido_id` — `integer`, **FOREIGN KEY** para `pedidos(id)`
-* `produto_id` — `integer`, **FOREIGN KEY** para `produtos(id)`
+* `produto_id` — `integer`, **FOREIGN KEY** para `produtos(id)` com **ON DELETE CASCADE**
 * `quantidade` — `integer`, **NOT NULL**, com valor mínimo igual a `1`
 
 A chave primária da tabela será composta por `pedido_id` e `produto_id`.
