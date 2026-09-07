@@ -12,6 +12,7 @@ import (
 
 func IniciarBanco() {
 	ctx, pool := ConectarBanco()
+	defer pool.Close()
 	if pool == nil || ctx == nil {
 		return
 	}
@@ -34,6 +35,8 @@ func IniciarBanco() {
 
 func EncerrarBanco() {
 	ctx, pool := ConectarBanco()
+	defer pool.Close()
+
 	if pool == nil || ctx == nil {
 		return
 	}
@@ -41,6 +44,9 @@ func EncerrarBanco() {
 	apagarTabelas(ctx, pool)
 }
 
+// Não encerra a conexão
+// Essa responsabilidade é dada para quem usa essa função
+// Para isso, usa-se defer pool.Close()
 func ConectarBanco() (context.Context, *pgxpool.Pool) {
 	ctx := context.Background()
 
