@@ -7,14 +7,15 @@
    +-------------------+                     +-------------------+ 
    |     produtos      |                     |      pedidos      | 
    +-------------------+                     +-------------------+ 
-   | PK  id            |                     | PK  id            | 
-   |     categoria     |                     |     situacao      | 
-   |     quantidade    |                     +-------------------+ 
-   |     reservados    |                               | 1
+   | PK  id            |                     | PK  id            |
+   |     nome          |                     |     situacao      | 
+   |     categoria     |                     +-------------------+ 
+   |     quantidade    |                               | 1
+   |     reservados    |                               |
    +-------------------+                               |
              | 1                                       |
              |                                         |
-             |               (1:N)                     | (1:N)
+             | (1:N)                                   | (1:N)
              +-------------------++--------------------+
                                  ||
                                  \/
@@ -34,6 +35,7 @@ Armazena os produtos disponíveis no estoque.
 **Colunas:**
 
 * `id` — `serial`, **PRIMARY KEY**
+* `nome` `VARCHAR(50)` **UNIQUE NOT NULL**,
 * `categoria` — `char(1)`, **NOT NULL**, com valores permitidos `A`, `B` ou `C`
 * `quantidade` — `integer`, **NOT NULL**, com valor mínimo igual a `0`
 * `reservados` — `integer`, **DEFAULT 0**, com valor mínimo igual a `0`
