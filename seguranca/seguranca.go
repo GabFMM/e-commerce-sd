@@ -150,21 +150,25 @@ func CriarPacote(payload interface{}, nomeServico string, chavePrivada ed25519.P
 // AbrirPacote desserializa o Pacote e só retorna o payload se a
 // assinatura for válida; caso contrário retorna erro (evento deve ser descartado pelo chamador).
 func AbrirPacote(bodyMensagem []byte, chavesPublicas map[string]ed25519.PublicKey) (json.RawMessage, error) {
-	var Pacote Pacote
-	if err := json.Unmarshal(bodyMensagem, &Pacote); err != nil {
+	var pacote Pacote
+	if err := json.Unmarshal(bodyMensagem, &pacote); err != nil {
 		return nil, fmt.Errorf("falha ao desserializar Pacote: %w", err)
 	}
 
-	chavePublica, existe := chavesPublicas[Pacote.Producer]
+	chavePublica, existe := chavesPublicas[pacote.Producer]
 	if !existe {
-		return nil, fmt.Errorf("chave pública desconhecida para produtor %q", Pacote.Producer)
+		return nil, fmt.Errorf("chave pública desconhecida para produtor %q", pacote.Producer)
 	}
 
-	if !ed25519.Verify(chavePublica, Pacote.Payload, Pacote.Signature) {
-		return nil, fmt.Errorf("assinatura inválida — evento de %q descartado", Pacote.Producer)
+	// producer + payload, na mesma ordem, com o mesmo separador.
+	dados := append([]byte(pacote.Producer+":"), pacote.Payload...)
+	hash := sha256.Sum256(dados)
+
+	if !ed25519.Verify(chavePublica, hash[:], pacote.Signature) {
+		return nil, fmt.Errorf("assinatura inválida — evento de %q descartado", pacote.Producer)
 	}
 
-	return Pacote.Payload, nil
+	return pacote.Payload, nil
 }
 
 // CarregarTodasChavesPublicas varre uma pasta e monta o mapa

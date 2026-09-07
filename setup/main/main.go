@@ -1,11 +1,11 @@
 package main
 
 import (
-	"os"
-	"log"
-	"e-commerce-sd/setup"
 	"e-commerce-sd/data"
 	"e-commerce-sd/seguranca"
+	"e-commerce-sd/setup"
+	"log"
+	"os"
 )
 
 func main() {
