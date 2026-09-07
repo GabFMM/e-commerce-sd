@@ -36,10 +36,10 @@ var nomesServicos = []string{
 }
 
 // pastaChavesDoServico monta o caminho da pasta "chaves" de um serviço,
-// assumindo que este script roda a partir de "gerar-chaves/" e que
+// assumindo que este script roda na raiz do projeto e que
 // cada microsserviço mora em "ms-<nome>/".
 func pastaChavesDoServico(nomeServico string) string {
-	return fmt.Sprintf("../../ms-%s/chaves", nomeServico)
+	return fmt.Sprintf("ms-%s/chaves", nomeServico)
 }
 
 func GerarChaves() {
