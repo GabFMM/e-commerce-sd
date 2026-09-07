@@ -8,6 +8,8 @@ import (
 	"log"
 )
 
+// Retorna true se disponivel, false se indisponivel
+// Quem atualiza a situação do pedido é o MS-PRINCIPAL
 func VerificarDisponibilidade(pedidoDTO dto.PedidoDTO) bool {
     ctx, pool := data.ConectarBanco()
     defer pool.Close()
@@ -26,14 +28,12 @@ func VerificarDisponibilidade(pedidoDTO dto.PedidoDTO) bool {
 
     err := row.Scan()
 
-    var situacao string
-
     switch {
     case err == nil:
-        situacao = "ESTOQUE_INDISPONIVEL"
+        return false
 
     case errors.Is(err, sql.ErrNoRows):
-        situacao = "ESTOQUE_DISPONIVEL"
+        return true
 
     default:
         log.Printf(
@@ -43,30 +43,6 @@ func VerificarDisponibilidade(pedidoDTO dto.PedidoDTO) bool {
         )
         return false
     }
-
-    query = `
-        UPDATE pedidos
-        SET situacao = $1
-        WHERE id = $2
-    `
-
-    _, err = pool.Exec(ctx, query, situacao, pedidoDTO.Id)
-    if err != nil {
-        log.Printf(
-            "[ERRO] Não foi possível atualizar a situação do pedido. PedidoId=%d: %v",
-            pedidoDTO.Id,
-            err,
-        )
-        return false
-    }
-
-    log.Printf(
-        "[INFO] Situação do pedido mudada para %s. PedidoId=%d",
-        situacao,
-        pedidoDTO.Id,
-    )
-
-    return true
 }
 
 func ReservarProdutos(pedidoDTO dto.PedidoDTO) {

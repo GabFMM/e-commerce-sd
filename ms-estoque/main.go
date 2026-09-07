@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
+	"crypto/ed25519"
 	"e-commerce-sd/ms-estoque/dto"
 	"e-commerce-sd/ms-estoque/service"
 	"e-commerce-sd/seguranca"
 	"encoding/json"
 	"log"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -57,6 +60,9 @@ func main() {
 	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("ms-estoque/")
 	failOnError(err, "[ERRO-MS-ESTOQUE] Não foi possível carregar as chaves públicas")
 
+	chavePrivada, err := seguranca.CarregarChavePrivada("chaves/estoque_private.pem")
+	failOnError(err, "[ERRO-MS-ESTOQUE] Não foi possível carregar chave privada")
+
 	var forever chan struct{}
 
 	go func() {
@@ -70,7 +76,7 @@ func main() {
 
 			switch d.RoutingKey {
 			case "pedido.criado":
-				verificarDisponibilidade(payload)
+				verificarDisponibilidade(publishCh, chavePrivada, payload)
 			case "pedido.excluido":
 				removerReservas(payload)
 			default:
@@ -83,7 +89,7 @@ func main() {
 	<-forever
 }
 
-func verificarDisponibilidade(payload json.RawMessage) {
+func verificarDisponibilidade(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, payload json.RawMessage) {
 	var pedidoDTO dto.PedidoDTO
 
 	err := json.Unmarshal(payload, &pedidoDTO)
@@ -94,8 +100,9 @@ func verificarDisponibilidade(payload json.RawMessage) {
 
 	if service.VerificarDisponibilidade(pedidoDTO) {
 		service.ReservarProdutos(pedidoDTO)
+		publicar(publishCh, chavePrivada, "pedido.estoque_ok", pedidoDTO)
 	} else {
-		
+		publicar(publishCh, chavePrivada, "estoque.indisponivel", pedidoDTO)
 	}
 }
 
@@ -109,4 +116,34 @@ func removerReservas(payload json.RawMessage) {
 	}
 
 	service.RemoverReservas(pedidoDTO)
+	// Não publica nada, conforme requisitos
+}
+
+func publicar(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, routingKey string, body interface{}) {
+	bodyByte, err := seguranca.CriarPacote(body, NomeServico, chavePrivada)
+	if err != nil {
+		log.Printf("[ERRO-MS-ESTOQUE] Não foi possível criar o pacote para %s: %v", routingKey, err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = publishCh.PublishWithContext(ctx,
+		NomeExchange,        // exchange
+		routingKey,          // routing key
+		false,               // mandatory
+		false,               // immediate
+		amqp.Publishing{
+			ContentType: "application/json",
+			Body:        bodyByte,
+		},
+	)
+
+	if err != nil {
+		log.Printf("[ERRO-MS-ESTOQUE] Falha ao publicar pedido.estoque_ok: %v", err)
+		return
+	}
+
+	log.Printf("[INFO-MS-ESTOQUE] Pacote publicado para %s", routingKey)
 }
