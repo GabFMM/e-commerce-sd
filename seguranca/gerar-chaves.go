@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 )
 
 func copiarArquivo(origem, destino string) error {
@@ -74,18 +75,20 @@ func GerarChaves() {
 		}
 	}
 
-	//Copia só a chave pública do ms-promocoes para os consumidores
-	var consumidores = []string{"con1", "con2"}
 	servicoProvedor := "promocoes"
 	nomeArquivoPromocao := fmt.Sprintf("%s_public.pem", servicoProvedor)
 	caminhoOrigemPromocao := fmt.Sprintf("%s/%s", pastaChavesDoServico(servicoProvedor), nomeArquivoPromocao)
 
-	for _, destino := range consumidores {
-		caminhoDestino := fmt.Sprintf("consumidor/%s/chaves/%s", destino, nomeArquivoPromocao)
+	// 1. Caminho corrigido para "consumidor" (singular)
+	caminhoDestino := fmt.Sprintf("consumidor/chaves/%s", nomeArquivoPromocao)
 
-		if err := copiarArquivo(caminhoOrigemPromocao, caminhoDestino); err != nil {
-			log.Fatalf("falha ao copiar %s para %s: %v", caminhoOrigemPromocao, caminhoDestino, err)
-		}
+	// 2. Garante que a pasta de destino exista antes de tentar abrir/copiar o arquivo
+	if err := os.MkdirAll(filepath.Dir(caminhoDestino), 0755); err != nil {
+		log.Fatalf("falha ao criar diretório %s: %v", filepath.Dir(caminhoDestino), err)
+	}
+
+	if err := copiarArquivo(caminhoOrigemPromocao, caminhoDestino); err != nil {
+		log.Fatalf("falha ao copiar %s para %s: %v", caminhoOrigemPromocao, caminhoDestino, err)
 	}
 
 	fmt.Println("Todas as chaves foram geradas e distribuídas com sucesso.")

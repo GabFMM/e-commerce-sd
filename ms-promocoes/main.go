@@ -148,7 +148,7 @@ func main() {
 	defer publishCh.Close()
 
 	// Ajustado para apontar para a chave correspondente ao serviço de promoções
-	chavePrivada, err := seguranca.CarregarChavePrivada("chaves/promocoes_private.pem")
+	chavePrivada, err := seguranca.CarregarChavePrivada("ms-promocoes/chaves/promocoes_private.pem")
 	failOnError(err, "Erro ao carregar chave privada do MS Promocoes")
 
 	var wg sync.WaitGroup
