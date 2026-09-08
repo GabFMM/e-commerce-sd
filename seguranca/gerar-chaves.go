@@ -74,5 +74,19 @@ func GerarChaves() {
 		}
 	}
 
+	//Copia só a chave pública do ms-promocoes para os consumidores
+	var consumidores = []string{"con1", "con2"}
+	servicoProvedor := "promocoes"
+	nomeArquivoPromocao := fmt.Sprintf("%s_public.pem", servicoProvedor)
+	caminhoOrigemPromocao := fmt.Sprintf("%s/%s", pastaChavesDoServico(servicoProvedor), nomeArquivoPromocao)
+
+	for _, destino := range consumidores {
+		caminhoDestino := fmt.Sprintf("consumidor/%s/chaves/%s", destino, nomeArquivoPromocao)
+
+		if err := copiarArquivo(caminhoOrigemPromocao, caminhoDestino); err != nil {
+			log.Fatalf("falha ao copiar %s para %s: %v", caminhoOrigemPromocao, caminhoDestino, err)
+		}
+	}
+
 	fmt.Println("Todas as chaves foram geradas e distribuídas com sucesso.")
 }
