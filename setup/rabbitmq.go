@@ -3,7 +3,7 @@
 
 package setup
 
-import(
+import (
 	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -23,6 +23,92 @@ var Filas = []QueueRoutingKeys{
 }
 
 const NomeExchange = "eCommerce"
+const NomeExchangePromocoes = "Promoções"
+
+func ConfigurarFilasPromocoes(ch *amqp.Channel) {
+
+	// Declara a Exchange
+	err := ch.ExchangeDeclare(
+		NomeExchangePromocoes, //Exchange name
+		"topic",               //Exchange type
+		true,                  //durable
+		false,                 //autoDelete
+		false,                 //internal
+		false,                 //noWait
+		nil,
+	)
+	if err != nil {
+		log.Panicf("%s: %s", "[ERRO] Falha ao declarar a exchange Promoções", err)
+	}
+
+	// Declarar fila Q1
+	q1, err := ch.QueueDeclare(
+		"Q1",
+		true,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		log.Panicf("%s: %s", "[ERRO] Falha ao declarar a fila Q1", err)
+	}
+	log.Printf("[LOG] Queue %q declarada", q1.Name)
+
+	// Q1 aceita somente categorias A e B
+	routingKeysQ1 := []string{
+		"promocao.categoria.A",
+		"promocao.categoria.B",
+	}
+
+	for _, routingKey := range routingKeysQ1 {
+		err = ch.QueueBind(
+			q1.Name,               //queuename
+			routingKey,            // routingKey
+			NomeExchangePromocoes, //Exchange
+			false,                 //noWait
+			nil,
+		)
+
+		if err != nil {
+			log.Panicf(
+				"%s: %s",
+				"[ERRO] Falha ao bindar "+q1.Name+" com "+routingKey,
+				err,
+			)
+		}
+		log.Printf("[LOG] Queue %q bindada com %s ", q1.Name, routingKey)
+	}
+
+	// Declarar fila Q2
+	q2, err := ch.QueueDeclare(
+		"Q2",  //Queuename
+		true,  //durable
+		false, //autoDelete
+		false, //exclusive
+		false, //noWait
+		nil,   //args
+	)
+	if err != nil {
+		log.Panicf("%s: %s", "[ERRO] Falha ao declarar a fila Q2", err)
+	}
+	log.Printf("[LOG] Queue %q declarada", q2.Name)
+
+	// Q2 aceita qualquer categoria
+	err = ch.QueueBind(
+		q2.Name,                //Queuename
+		"promocao.categoria.*", //RoutingKey
+		NomeExchangePromocoes,  // Exchange
+		false,
+		nil,
+	)
+	if err != nil {
+		log.Panicf(
+			"%s: %s", "[ERRO] Falha ao bindar "+q2.Name+" com promocao.categoria.*", err,
+		)
+	}
+	log.Printf("[LOG] Queue %q bindada com promocao.categoria.*", q2.Name)
+}
 
 func ConfigurarFilas() {
 	//Aqui foi só um teste ver se tava certo a struct
@@ -54,7 +140,7 @@ func ConfigurarFilas() {
 	)
 
 	if err != nil {
-		log.Panicf("%s: %s", "[ERRO] Falha ao declarar a exchange", err)
+		log.Panicf("%s: %s", "[ERRO] Falha ao declarar a exchange eCommerce", err)
 	}
 	log.Printf("[LOG] Exchange %q declarada", NomeExchange)
 
@@ -88,4 +174,5 @@ func ConfigurarFilas() {
 			log.Printf("     -> bind com routing key %q", routKey)
 		}
 	}
+	ConfigurarFilasPromocoes(ch)
 }
