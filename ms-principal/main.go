@@ -33,7 +33,7 @@ func failOnError(err error, msg string) {
 // Não encerra o MS
 func printOnError(err error, msg string) {
 	if err != nil {
-		log.Printf("%s: %s", msg, err)
+		log.Printf("%s: %s\n", msg, err)
 	}
 }
 
@@ -63,10 +63,10 @@ func main() {
 	)
 	failOnError(err, "[ERRO-MS-PRINCIPAL] Falha ao registrar na fila do consumidor")
 
-	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("ms-estoque/")
+	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("ms-principal/chaves/")
 	failOnError(err, "[ERRO-MS-PRINCIPAL] Não foi possível carregar as chaves públicas")
 
-	chavePrivada, err := seguranca.CarregarChavePrivada("chaves/estoque_private.pem")
+	chavePrivada, err := seguranca.CarregarChavePrivada("ms-principal/chaves/principal_private.pem")
 	failOnError(err, "[ERRO-MS-PRINCIPAL] Não foi possível carregar chave privada")
 
 	var forever chan struct{}
@@ -99,11 +99,11 @@ func main() {
 	}()
 
 	// Processa entradas do usuário, junto da exibição do menu
-	go func () {
+	go func() {
 		criarMenu(publishCh, chavePrivada)
 	}()
 
-	log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
+	log.Printf(" [*] Waiting for messages. To exit press CTRL+C\n")
 	<-forever
 }
 
@@ -130,7 +130,7 @@ func pagamentoRecusado(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey,
 	}
 
 	service.AtualizarSituacaoPedido(pedidoDTO, "PAGAMENTO_RECUSADO")
-	
+
 	publicar(publishCh, chavePrivada, "pedido.excluido", pedidoDTO)
 }
 
@@ -170,14 +170,14 @@ func estoqueIndisponivel(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKe
 	}
 
 	service.AtualizarSituacaoPedido(pedidoDTO, "ESTOQUE_INDISPONIVEL")
-	
+
 	publicar(publishCh, chavePrivada, "pedido.excluido", pedidoDTO)
 }
 
 func publicar(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, routingKey string, body interface{}) {
 	bodyByte, err := seguranca.CriarPacote(body, NomeServico, chavePrivada)
 	if err != nil {
-		log.Printf("[ERRO-MS-PRINCIPAL] Não foi possível criar o pacote para %s: %v", routingKey, err)
+		log.Printf("[ERRO-MS-PRINCIPAL] Não foi possível criar o pacote para %s: %v\n", routingKey, err)
 		return
 	}
 
@@ -185,10 +185,10 @@ func publicar(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, routingK
 	defer cancel()
 
 	err = publishCh.PublishWithContext(ctx,
-		NomeExchange,        // exchange
-		routingKey,          // routing key
-		false,               // mandatory
-		false,               // immediate
+		NomeExchange, // exchange
+		routingKey,   // routing key
+		false,        // mandatory
+		false,        // immediate
 		amqp.Publishing{
 			ContentType: "application/json",
 			Body:        bodyByte,
@@ -196,11 +196,11 @@ func publicar(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, routingK
 	)
 
 	if err != nil {
-		log.Printf("[ERRO-MS-PRINCIPAL] Falha ao publicar pedido.estoque_ok: %v", err)
+		log.Printf("[ERRO-MS-PRINCIPAL] Falha ao publicar pedido.estoque_ok: %v\n", err)
 		return
 	}
 
-	log.Printf("[INFO-MS-PRINCIPAL] Pacote publicado para %s", routingKey)
+	log.Printf("[INFO-MS-PRINCIPAL] Pacote publicado para %s\n", routingKey)
 }
 
 func lerOpcaoEscolhidaMinMax(min int, max int) int {
@@ -208,7 +208,7 @@ func lerOpcaoEscolhidaMinMax(min int, max int) int {
 
 	_, err := fmt.Scan(&opcao)
 	for err != nil || opcao < min || opcao > max {
-		fmt.Printf("Entrada inválida. Tente novamente")
+		fmt.Printf("Entrada inválida. Tente novamente\n")
 
 		if err != nil {
 			// Descarta a linha com o texto inválido
@@ -218,8 +218,8 @@ func lerOpcaoEscolhidaMinMax(min int, max int) int {
 			}
 		}
 
-		fmt.Printf("Entrada inválida. Tente novamente:")
-		_, err = fmt.Scan(&opcao) 
+		fmt.Printf("Entrada inválida. Tente novamente:\n")
+		_, err = fmt.Scan(&opcao)
 	}
 
 	return opcao
@@ -230,7 +230,7 @@ func lerOpcaoEscolhidaListaInt(lista []int) int {
 
 	_, err := fmt.Scan(&opcao)
 	for err != nil || !slices.Contains(lista, opcao) {
-		fmt.Printf("Entrada inválida. Tente novamente")
+		fmt.Printf("Entrada inválida. Tente novamente\n")
 
 		if err != nil {
 			// Descarta a linha com o texto inválido
@@ -241,7 +241,7 @@ func lerOpcaoEscolhidaListaInt(lista []int) int {
 		}
 
 		fmt.Print("Entrada inválida. Tente novamente:")
-		_, err = fmt.Scan(&opcao) 
+		_, err = fmt.Scan(&opcao)
 	}
 
 	return opcao
@@ -252,7 +252,7 @@ func lerOpcaoEscolhidaListaStr(lista []string) string {
 
 	_, err := fmt.Scan(&opcao)
 	for err != nil || !slices.Contains(lista, opcao) {
-		fmt.Printf("Entrada inválida. Tente novamente")
+		fmt.Printf("Entrada inválida. Tente novamente\n")
 
 		if err != nil {
 			// Descarta a linha com o texto inválido
@@ -263,7 +263,7 @@ func lerOpcaoEscolhidaListaStr(lista []string) string {
 		}
 
 		fmt.Print("Entrada inválida. Tente novamente:")
-		_, err = fmt.Scan(&opcao) 
+		_, err = fmt.Scan(&opcao)
 	}
 
 	return opcao
@@ -273,7 +273,7 @@ func criarMenu(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
 	fmt.Println(">> MENU PRINCIPAL <<")
 	fmt.Println("")
 	fmt.Println("Digite o número de uma opção:")
-	fmt.Println("1 - Visualizar pedidos")
+	fmt.Println("1 - Visualizar produtos")
 	fmt.Println("2 - Realizar pedidos")
 	fmt.Println("3 - Excluir pedidos")
 	fmt.Println("4 - Consultar pedidos e respectivos status")
@@ -283,7 +283,7 @@ func criarMenu(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
 
 	switch opcao {
 	case 1:
-		visualizarPedidos(publishCh, chavePrivada)
+		visualizarProdutos(publishCh, chavePrivada)
 	case 2:
 		realizarPedidos(publishCh, chavePrivada)
 	case 3:
@@ -293,21 +293,18 @@ func criarMenu(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
 	}
 }
 
-func visualizarPedidos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
-	pedidos := service.ObterPedidos()
+func visualizarProdutos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
+	produtos := service.ObterProdutos()
 
-	if pedidos == nil {
-		fmt.Println("Não foi possível recuperar seus pedidos")
+	if produtos == nil {
+		fmt.Println("Não foi possível recuperar produtos")
 		fmt.Println("")
 	} else {
-		for _, pedido := range pedidos {
-			fmt.Printf("PEDIDO %d:", pedido.Id)
-			fmt.Printf("- Situacao: %s", pedido.Situacao)
-			fmt.Println("- Pedidos:")
-
-			for chave, valor := range pedido.Produtos {
-				fmt.Printf("\t=> %s (%d)", chave, valor)
-			}
+		for _, produto := range produtos {
+			fmt.Printf("PRODUTO %d:\n", produto.Id)
+			fmt.Printf("- Nome: %s\n", produto.Nome)
+			fmt.Printf("- Categoria: %s\n", produto.Categoria)
+			fmt.Printf("- Quantidade disponível: %d\n", produto.QuantidadeDisponivel)
 
 			fmt.Println("")
 		}
@@ -349,10 +346,10 @@ func realizarPedidos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
 			for _, produto := range produtos {
 				ids = append(ids, produto.Id)
 
-				fmt.Printf("%s:", produto.Nome)
-				fmt.Printf("- ID: %d", produto.Id)
-				fmt.Printf("- Categoria: %s", produto.Categoria)
-				fmt.Printf("- Quantidade disponível: %d", produto.QuantidadeDisponivel)
+				fmt.Printf("%s:\n", produto.Nome)
+				fmt.Printf("- ID: %d\n", produto.Id)
+				fmt.Printf("- Categoria: %s\n", produto.Categoria)
+				fmt.Printf("- Quantidade disponível: %d\n", produto.QuantidadeDisponivel)
 				fmt.Println("")
 			}
 
@@ -420,12 +417,12 @@ func excluirPedidos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
 			fmt.Println("")
 		} else {
 			for _, pedido := range pedidos {
-				fmt.Printf("PEDIDO %d:", pedido.Id)
-				fmt.Printf("- Situacao: %s", pedido.Situacao)
+				fmt.Printf("PEDIDO %d:\n", pedido.Id)
+				fmt.Printf("- Situacao: %s\n", pedido.Situacao)
 				fmt.Println("- Pedidos:")
 
 				for chave, valor := range pedido.Produtos {
-					fmt.Printf("\t=> %s (%d)", chave, valor)
+					fmt.Printf("\t=> %s (%d)\n", chave, valor)
 				}
 
 				fmt.Println("")

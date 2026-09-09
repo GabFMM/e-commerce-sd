@@ -57,10 +57,10 @@ func main() {
 	)
 	failOnError(err, "[ERRO-MS-ESTOQUE] Falha ao registrar na fila do consumidor")
 
-	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("ms-estoque/")
+	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("ms-estoque/chaves/")
 	failOnError(err, "[ERRO-MS-ESTOQUE] Não foi possível carregar as chaves públicas")
 
-	chavePrivada, err := seguranca.CarregarChavePrivada("chaves/estoque_private.pem")
+	chavePrivada, err := seguranca.CarregarChavePrivada("ms-estoque/chaves/estoque_private.pem")
 	failOnError(err, "[ERRO-MS-ESTOQUE] Não foi possível carregar chave privada")
 
 	var forever chan struct{}
@@ -130,10 +130,10 @@ func publicar(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, routingK
 	defer cancel()
 
 	err = publishCh.PublishWithContext(ctx,
-		NomeExchange,        // exchange
-		routingKey,          // routing key
-		false,               // mandatory
-		false,               // immediate
+		NomeExchange, // exchange
+		routingKey,   // routing key
+		false,        // mandatory
+		false,        // immediate
 		amqp.Publishing{
 			ContentType: "application/json",
 			Body:        bodyByte,

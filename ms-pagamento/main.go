@@ -27,13 +27,13 @@ const ProbabilidadeAprovacao = 7
 
 // PedidoEstoqueOk é o que esperamos no payload do evento pedido.estoque_ok.
 type PedidoEstoqueOk struct {
-	PedidoID string `json:"pedido_id"`
+	PedidoID int `json:"pedido_id"`
 }
 
 // PagamentoResultado é o payload publicado tanto para aprovado
 // quanto para recusado — a routing key diferencia o resultado.
 type PagamentoResultado struct {
-	PedidoID string `json:"pedido_id"`
+	PedidoID int `json:"pedido_id"`
 }
 
 func publicarResultado(ch *amqp.Channel, evento PagamentoResultado, routingKey string,
@@ -134,10 +134,10 @@ func main() {
 	failOnError(err, "Erro ao abrir channel de consume")
 	defer consumeCh.Close()
 
-	chavePrivada, err := seguranca.CarregarChavePrivada("chaves/pagamento_private.pem")
+	chavePrivada, err := seguranca.CarregarChavePrivada("ms-pagamento/chaves/pagamento_private.pem")
 	failOnError(err, "Erro ao carregar chave privada do MS Pagamento")
 
-	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("chaves")
+	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("ms-pagamento/chaves")
 	failOnError(err, "Erro ao carregar chaves públicas")
 
 	var wg sync.WaitGroup

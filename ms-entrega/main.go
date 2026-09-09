@@ -23,12 +23,12 @@ func failOnError(err error, msg string) {
 }
 
 type PedidoAprovado struct {
-	PedidoID string `json:"pedido_id"`
+	PedidoID int `json:"pedido_id"`
 }
 
 // PedidoEnviado é a struct de negócio que vamos publicar.
 type PedidoEnviado struct {
-	PedidoID string `json:"pedido_id"`
+	PedidoID int    `json:"pedido_id"`
 	NotaID   string `json:"nota_id"`
 }
 
@@ -73,7 +73,7 @@ func handlePagamentoAprovado(payload []byte, publishCh *amqp.Channel, chavePriva
 
 	// Simulação da emissão de nota / preparo de entrega
 	time.Sleep(500 * time.Millisecond)
-	notaID := "NF-" + dados.PedidoID
+	notaID := "NF-" + string(dados.PedidoID)
 
 	evento := PedidoEnviado{
 		PedidoID: dados.PedidoID,
@@ -132,11 +132,11 @@ func main() {
 	defer consumeCh.Close()
 
 	// Própria chave privada, usada para assinar tudo que publicarmos.
-	chavePrivada, err := seguranca.CarregarChavePrivada("chaves/entrega_private.pem")
+	chavePrivada, err := seguranca.CarregarChavePrivada("ms-entrega/chaves/entrega_private.pem")
 	failOnError(err, "Erro ao carregar chave privada do MS Entrega")
 
 	// Chaves públicas de todos os outros microsserviços
-	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("chaves")
+	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("ms-entrega/chaves")
 	failOnError(err, "Erro ao carregar chaves públicas")
 
 	var wg sync.WaitGroup
