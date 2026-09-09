@@ -42,8 +42,8 @@ func tratarPromocao(nomeFila, routingKey string, payload json.RawMessage) {
 	log.Printf("[%s] Promoção recebida (%s): %s - %d%% de desconto", nomeFila, routingKey, promocao.Produto, promocao.Desconto)
 }
 
-// consumir registra o consumidor na fila Q1 e despacha cada
-// mensagem recebida para tratarPromocao.
+// consumir registra o consumidor na fila determinada por nomeFila 
+// e despacha cada mensagem recebida para tratarPromocao.
 func consumir(consumeCh *amqp.Channel, nomeFila string, chavesPublicas map[string]ed25519.PublicKey) {
 	msgs, err := consumeCh.Consume(
 		nomeFila, // queue
