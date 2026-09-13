@@ -59,7 +59,7 @@ func publicarPedidoEnviado(ch *amqp.Channel, evento PedidoEnviado, chavePrivada 
 		return
 	}
 
-	log.Printf(" [x] Publicado pedido.enviado para pedido %s (nota %s)", evento.PedidoID, evento.NotaID)
+	log.Printf(" [INFO-MS-ENTREGA] Publicado pedido.enviado para pedido %d (nota %s)", evento.PedidoID, evento.NotaID)
 }
 
 func handlePagamentoAprovado(payload []byte, publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
@@ -73,7 +73,7 @@ func handlePagamentoAprovado(payload []byte, publishCh *amqp.Channel, chavePriva
 
 	// Simulação da emissão de nota / preparo de entrega
 	time.Sleep(500 * time.Millisecond)
-	notaID := "NF-" + string(dados.PedidoID)
+	notaID := "NF-TEÓRICA" + string(dados.PedidoID)
 
 	evento := PedidoEnviado{
 		PedidoID: dados.PedidoID,

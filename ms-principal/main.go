@@ -270,26 +270,28 @@ func lerOpcaoEscolhidaListaStr(lista []string) string {
 }
 
 func criarMenu(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
-	fmt.Println(">> MENU PRINCIPAL <<")
-	fmt.Println("")
-	fmt.Println("Digite o número de uma opção:")
-	fmt.Println("1 - Visualizar produtos")
-	fmt.Println("2 - Realizar pedidos")
-	fmt.Println("3 - Excluir pedidos")
-	fmt.Println("4 - Consultar pedidos e respectivos status")
-	fmt.Println("")
+	for {
+		fmt.Println(">> MENU PRINCIPAL <<")
+		fmt.Println("")
+		fmt.Println("Digite o número de uma opção:")
+		fmt.Println("1 - Visualizar produtos")
+		fmt.Println("2 - Realizar pedidos")
+		fmt.Println("3 - Excluir pedidos")
+		fmt.Println("4 - Consultar pedidos e respectivos status")
+		fmt.Println("")
 
-	opcao := lerOpcaoEscolhidaMinMax(1, 4)
+		opcao := lerOpcaoEscolhidaMinMax(1, 4)
 
-	switch opcao {
-	case 1:
-		visualizarProdutos(publishCh, chavePrivada)
-	case 2:
-		realizarPedidos(publishCh, chavePrivada)
-	case 3:
-		excluirPedidos(publishCh, chavePrivada)
-	case 4:
-		consultarPedidos(publishCh, chavePrivada)
+		switch opcao {
+		case 1:
+			visualizarProdutos(publishCh, chavePrivada)
+		case 2:
+			realizarPedidos(publishCh, chavePrivada)
+		case 3:
+			excluirPedidos(publishCh, chavePrivada)
+		case 4:
+			consultarPedidos(publishCh, chavePrivada)
+		}
 	}
 }
 
@@ -312,8 +314,6 @@ func visualizarProdutos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey
 
 	fmt.Println("Digite 1 para voltar ao menu principal")
 	lerOpcaoEscolhidaMinMax(1, 1)
-
-	criarMenu(publishCh, chavePrivada)
 }
 
 func realizarPedidos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
@@ -325,7 +325,7 @@ func realizarPedidos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
 		fmt.Println("Digite 1 para voltar ao menu principal")
 		lerOpcaoEscolhidaMinMax(1, 1)
 
-		criarMenu(publishCh, chavePrivada)
+		return
 	}
 
 	produtos := service.ObterProdutos()
@@ -336,7 +336,7 @@ func realizarPedidos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
 		fmt.Println("Digite 1 para voltar ao menu principal")
 		lerOpcaoEscolhidaMinMax(1, 1)
 
-		criarMenu(publishCh, chavePrivada)
+		return
 	} else {
 		resposta := "S"
 
@@ -382,11 +382,6 @@ func realizarPedidos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
 			} else {
 				fmt.Println("Sucesso. Produto adicionado ao pedido.")
 				fmt.Println("")
-
-				var pedido dto.PedidoDTO
-				pedido.Id = pedidoId
-
-				publicar(publishCh, chavePrivada, "pedido.criado", pedido)
 			}
 
 			fmt.Println("Deseja adicionar outro produto ao mesmo pedido? (S/N)")
@@ -395,10 +390,15 @@ func realizarPedidos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
 			fmt.Println("")
 		}
 
+		var pedido dto.PedidoDTO
+		pedido.Id = pedidoId
+
+		publicar(publishCh, chavePrivada, "pedido.criado", pedido)
+
 		fmt.Println("Digite 1 para voltar ao menu principal")
 		lerOpcaoEscolhidaMinMax(1, 1)
 
-		criarMenu(publishCh, chavePrivada)
+		return
 	}
 }
 
@@ -477,8 +477,6 @@ func excluirPedidos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
 
 	fmt.Println("Digite 1 para voltar ao menu principal")
 	lerOpcaoEscolhidaMinMax(1, 1)
-
-	criarMenu(publishCh, chavePrivada)
 }
 
 func consultarPedidos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
@@ -499,8 +497,6 @@ func consultarPedidos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) 
 
 	fmt.Println("Digite 1 para voltar ao menu principal")
 	lerOpcaoEscolhidaMinMax(1, 1)
-
-	criarMenu(publishCh, chavePrivada)
 }
 
 func consultarPedidoPorId() {

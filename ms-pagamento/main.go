@@ -23,7 +23,7 @@ func failOnError(err error, msg string) {
 	}
 }
 
-const ProbabilidadeAprovacao = 7
+const ProbabilidadeAprovacao = 9
 
 // PedidoEstoqueOk é o que esperamos no payload do evento pedido.estoque_ok.
 type PedidoEstoqueOk struct {
@@ -63,7 +63,7 @@ func publicarResultado(ch *amqp.Channel, evento PagamentoResultado, routingKey s
 		return
 	}
 
-	log.Printf(" [LOG] Publicado %s para pedido %s", routingKey, evento.PedidoID)
+	log.Printf(" [INFO-MS-PAGAMENTO] Publicado %s para pedido %d", routingKey, evento.PedidoID)
 }
 
 func handlePedidoEstoqueOk(payload []byte, publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
@@ -76,8 +76,8 @@ func handlePedidoEstoqueOk(payload []byte, publishCh *amqp.Channel, chavePrivada
 	log.Printf(" [x] Processando pagamento do pedido %s...", dados.PedidoID)
 	time.Sleep(300 * time.Millisecond) // simula tempo de processamento
 
-	aprovado := rand.Int()%10+1 < ProbabilidadeAprovacao
-
+	aprovado := rand.Int()%10+1 <= ProbabilidadeAprovacao
+	log.Print(aprovado)
 	evento := PagamentoResultado{PedidoID: dados.PedidoID}
 
 	routingKey := "pagamento.recusado"

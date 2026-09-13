@@ -37,8 +37,6 @@ var nomesServicos = []string{
 }
 
 // pastaChavesDoServico monta o caminho da pasta "chaves" de um serviço,
-// assumindo que este script roda na raiz do projeto e que
-// cada microsserviço mora em "ms-<nome>/".
 func pastaChavesDoServico(nomeServico string) string {
 	return fmt.Sprintf("ms-%s/chaves", nomeServico)
 }
@@ -79,10 +77,9 @@ func GerarChaves() {
 	nomeArquivoPromocao := fmt.Sprintf("%s_public.pem", servicoProvedor)
 	caminhoOrigemPromocao := fmt.Sprintf("%s/%s", pastaChavesDoServico(servicoProvedor), nomeArquivoPromocao)
 
-	// 1. Caminho corrigido para "consumidor" (singular)
 	caminhoDestino := fmt.Sprintf("consumidor/chaves/%s", nomeArquivoPromocao)
 
-	// 2. Garante que a pasta de destino exista antes de tentar abrir/copiar o arquivo
+	//Garante que a pasta de destino exista antes de tentar abrir/copiar o arquivo
 	if err := os.MkdirAll(filepath.Dir(caminhoDestino), 0755); err != nil {
 		log.Fatalf("falha ao criar diretório %s: %v", filepath.Dir(caminhoDestino), err)
 	}

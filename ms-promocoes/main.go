@@ -29,7 +29,7 @@ var Produtos = map[string]string{
 // PromocaoGerada é o payload publicado a cada promoção sorteada.
 type PromocaoGerada struct {
 	Produto   string
-	Desconto  int // percentual, ex: 10, 20, 30
+	Desconto  int // percentual, 10, 20, 30
 	Categoria string
 }
 
