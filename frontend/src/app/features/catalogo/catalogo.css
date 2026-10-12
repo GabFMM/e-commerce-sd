@@ -1,0 +1,68 @@
+main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5vh;
+
+    margin-top: 5vh;
+}
+
+.barra-pesquisa {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    width: 100%;
+    max-width: 500px;
+    padding: 10px 15px;
+
+    border: 2px solid var(--color-border);
+    border-radius: 20px;
+
+    background-color: var(--color-surface-muted);
+    color: var(--color-text-light);
+
+    box-sizing: border-box;
+}
+
+.barra-pesquisa input {
+    flex: 1;
+    min-width: 0;
+
+    border: none;
+    outline: none;
+    background: transparent;
+
+    font-size: 16px;
+    color: var(--color-text-light);
+}
+
+.lupa {
+    width: 25px;
+    height: 25px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.produtos {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+
+    width: 80vw;
+}
+
+.produto {
+    background-color: var(--color-primary);
+    color: var(--color-text-light);
+    padding: 20px;
+    flex: 0 1 250px;
+}
+
+.produto img {
+    width: 150px;
+    height: 150px;
+    object-fit: contain;
+}

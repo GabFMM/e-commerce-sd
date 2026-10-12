@@ -1,0 +1,23 @@
+<main>
+    <div class="barra-pesquisa">
+        <input 
+            type="text" 
+            [id]="nomeProduto" 
+            placeholder="Pesquise por produtos..."
+            (keyup.enter)="pesquisarProdutos()">
+
+        <img 
+            class="lupa" 
+            src="/lupa.png" 
+            alt="lupa"
+            (click)="pesquisarProdutos()">
+    </div>
+    <div class="produtos">
+        @for (produto of produtos; track produto.id) {
+            <div class="produto">
+                <img src="/imagem.svg" [alt]="produto.nome">
+                <p>{{ produto.nome }}</p>
+            </div>
+        }
+    </div>
+</main>
