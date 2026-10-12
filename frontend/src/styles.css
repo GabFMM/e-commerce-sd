@@ -1,1 +1,31 @@
 /* You can add global styles to this file, and also import other style files */
+
+:root {
+  /* Identidade visual */
+  --color-primary: #142B4A;
+  --color-accent: #2563EB;
+
+  /* Superfícies */
+  --color-surface: #E2E8F0;
+
+  /* Textos */
+  --color-text: #1E293B;
+  --color-text-muted: #64748B;
+
+  /* Estados */
+  --color-success: #16A34A;
+  --color-warning: #D97706;
+  --color-danger: #DC2626;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-family: Inter, Arial, sans-serif;
+}
+
+button {
+  background-color: var(--color-accent);
+  color: var(--color-surface);
+}
