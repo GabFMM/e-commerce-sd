@@ -3,8 +3,8 @@ import { inject, Service } from '@angular/core';
 
 @Service()
 export class PedidosService {
-    private http = inject(HttpClient);
-    private apiUrl = 'http://localhost:8080';
+  private http = inject(HttpClient);
+  private apiUrl = 'http://localhost:8080';
 
-    
+
 }

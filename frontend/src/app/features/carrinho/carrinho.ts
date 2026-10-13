@@ -17,6 +17,11 @@ export class Carrinho {
   // Relaciona o pedido.id com a quantidade desejada correspondente
   protected quantidadesDesejadas: Record<number, number> = {};
 
+  protected removerProduto(produtoId: number): void {
+    delete this.quantidadesDesejadas[produtoId];
+    this.carrinhoService.removerProduto(produtoId);
+  }
+
   protected desabilitarBotaoCriarPedido(): boolean {
     return !this.carrinhoService.temProdutoPronto();
   }
@@ -29,5 +34,14 @@ export class Carrinho {
           this.carrinhoService.adicionarProdutoPronto(produto.id, quantidade);
         }
     }
+
+    this.carrinhoService.criarPedido().subscribe({
+      next: () => {
+        this.carrinhoService.limpar();
+      },
+      error: (err) => {
+        console.error(err);
+      }
+    })
   }
 }

@@ -1,52 +1,87 @@
-import { Service, signal } from '@angular/core';
+import { inject, Service, signal } from '@angular/core';
 import { Produto } from './produtos';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
 
 interface ProdutoPronto {
-    produtoId: number,
-    // Quantidade desejada pelo usuário
-    quantidade: number
+  produtoId: number,
+  // Quantidade desejada pelo usuário
+  quantidade: number
+}
+
+interface Pedido {
+  // Relaciona cada produto.id com sua quantidade desejada
+  itens: Record<number, number>;
 }
 
 @Service()
 export class CarrinhoService {
-    private produtosProntos: ProdutoPronto[] = [];
+  private http = inject(HttpClient);
+  private apiUrl = 'http://localhost:8080';
 
-    // Produtos marcados como desejados,
-    // mas não foi determinada a quantidade desejada
-    protected produtos = signal<Produto[]>([]);
+  // Produtos com quantidade desejada
+  private produtosProntos: ProdutoPronto[] = [];
 
-    public getProdutos(): Produto[] {
-        return this.produtos();
-    }
+  // Produtos marcados como desejados,
+  // mas não foi determinada a quantidade desejada
+  protected produtos = signal<Produto[]>([]);
 
-    public temProdutoPronto(): boolean {
-        return Boolean(this.produtosProntos.length);
-    }
+  public getProdutos(): Produto[] {
+    return this.produtos();
+  }
 
-    public produtoEstaNoCarrinho(produto: Produto): boolean {
-        return this.produtos().some((p) => p.id === produto.id);
-    }
+  public temProdutoPronto(): boolean {
+    return Boolean(this.produtosProntos.length);
+  }
 
-    public adicionarProduto(produto: Produto): void {
-        // Não inclui duas vezes o mesmo produto
-        if(this.produtoEstaNoCarrinho(produto))
-            return;
+  public produtoEstaNoCarrinho(produto: Produto): boolean {
+    return this.produtos().some((p) => p.id === produto.id);
+  }
 
-        this.produtos.update((p) => [...p, produto]);
-    }
+  public adicionarProduto(produto: Produto): void {
+    // Não inclui duas vezes o mesmo produto
+    if(this.produtoEstaNoCarrinho(produto))
+      return;
 
-    public adicionarProdutoPronto(produtoId: number, quantidadeDesejada: number): void {
-        this.produtosProntos.push({
-            produtoId: produtoId,
-            quantidade: quantidadeDesejada
-        });
-    }
+    this.produtos.update((p) => [...p, produto]);
+  }
 
-    public removerProduto(produtoId: number): void {
-        this.produtos.update(itens => itens.filter(item => item.id !== produtoId));
-    }
+  public adicionarProdutoPronto(produtoId: number, quantidadeDesejada: number): void {
+    this.produtosProntos.push({
+      produtoId: produtoId,
+      quantidade: quantidadeDesejada
+    });
+  }
 
-    public limpar(): void {
-        this.produtos.set([]);
-    }
+  public removerProduto(produtoId: number): void {
+    this.produtos.update(itens => itens.filter(item => item.id !== produtoId));
+  }
+
+  // Remove os produtos do carrinho
+  // que possuem uma quantidade desejada
+  public limpar(): void {
+    this.produtos.update(
+      produtos => produtos.filter(
+        produto => !this.produtosProntos.some(
+          produtoPronto => produtoPronto.produtoId === produto.id
+        )
+      )
+    );
+
+    this.produtosProntos = [];
+  }
+
+  public criarPedido(): Observable<void> {
+    const pedido: Pedido = {
+      itens: this.produtosProntos.reduce((itens, produtoPronto) => {
+        itens[produtoPronto.produtoId] = produtoPronto.quantidade;
+        return itens;
+      }, {} as Record<number, number>)
+    };
+
+    return this.http.post<void>(
+      `${this.apiUrl}/pedidos`,
+      pedido
+    );
+  }
 }

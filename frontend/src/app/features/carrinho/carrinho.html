@@ -29,14 +29,15 @@
                     <button
                         type="button"
                         class="remover-produto"
-                        aria-label="Remover produto do carrinho">
+                        aria-label="Remover produto do carrinho"
+                        (click)="this.removerProduto(produto.id)">
                         <img src="/trash.svg" alt="">
                     </button>
                 </div>
             }
         </div>
 
-        <button 
+        <button
             type="button"
             title="Somente estarão inclusos no pedido os produtos que tiverem uma quantidade desejada informada"
             [disabled]="this.desabilitarBotaoCriarPedido()"
