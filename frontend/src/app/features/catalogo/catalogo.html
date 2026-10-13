@@ -1,14 +1,14 @@
 <main>
     <div class="barra-pesquisa">
-        <input 
-            type="text" 
-            [id]="nomeProduto" 
+        <input
+            type="text"
+            [id]="nomeProduto"
             placeholder="Pesquise por produtos..."
             (keyup.enter)="pesquisarProdutos()">
 
-        <img 
-            class="lupa" 
-            src="/lupa.png" 
+        <img
+            class="lupa"
+            src="/lupa.png"
             alt="lupa"
             (click)="pesquisarProdutos()">
     </div>
@@ -19,10 +19,11 @@
                 <img src="/imagem.svg" [alt]="produto.nome">
 
                 <p>{{ produto.nome }}</p>
+                <p>Categoria: {{ produto.categoria }}</p>
                 <p>Quantidade disponível: {{ this.produtosService.getQuantidadeDisponivel(produto) }}</p>
 
                 @if(!this.produtosService.estaDisponivel(produto)) {
-                    <button 
+                    <button
                         type="button"
                         title="Produto indisponível"
                         [disabled]="true"
@@ -31,7 +32,7 @@
                     </button>
                 }
                 @else if(this.carrinhoSerice.produtoEstaNoCarrinho(produto)) {
-                    <button 
+                    <button
                         type="button"
                         title="Produto Já adicionado no carrinho"
                         [disabled]="true"
@@ -40,7 +41,7 @@
                     </button>
                 }
                 @else {
-                    <button 
+                    <button
                         type="button"
                         (click)="AdicionarProdutoCarrinho(produto)">
                         Adicionar no carrinho

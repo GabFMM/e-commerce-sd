@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import { Observable } from 'rxjs';
 
-export interface Produto {
+export interface ProdutoDTO {
   id: number,
   nome: string,
   categoria: string,
@@ -13,24 +13,29 @@ export interface Produto {
 @Service()
 export class ProdutosService {
   private http = inject(HttpClient);
-  private apiUrl = 'http://localhost:8080';
+  private apiUrl = 'http://localhost:8080/produtos';
 
-  public obterProdutos(nomeProduto?: string): Observable<Produto[]> {
+  public obterProdutos(nome?: string, ids?: number[]): Observable<ProdutoDTO[]> {
     let params = new HttpParams();
 
-    // Só adiciona o parâmetro 'nome' se ele realmente existir e não for uma string vazia
-    if (nomeProduto && nomeProduto.trim()) {
-        params = params.set('nome_like', nomeProduto.trim());
+    if(nome && nome.trim()) {
+        params = params.set('nome_like', nome.trim());
     }
 
-    return this.http.get<Produto[]>(`${this.apiUrl}/produtos`, { params });
+    if (ids && ids.length > 0) {
+      ids.forEach(id => {
+        params = params.append('id', id.toString());
+      });
+    }
+
+    return this.http.get<ProdutoDTO[]>(`${this.apiUrl}`, { params });
   }
 
-  public estaDisponivel(produto: Produto): boolean {
+  public estaDisponivel(produto: ProdutoDTO): boolean {
     return Boolean(this.getQuantidadeDisponivel(produto));
   }
 
-  public getQuantidadeDisponivel(produto: Produto): number {
+  public getQuantidadeDisponivel(produto: ProdutoDTO): number {
     return produto.quantidade - produto.reservados;
   }
 }

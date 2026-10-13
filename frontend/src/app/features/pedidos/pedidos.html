@@ -1,0 +1,82 @@
+<main>
+    @if(!this.pedidosService.getPedidos().length) {
+        <h1>Você ainda não criou um pedido!</h1>
+        <p><a [routerLink]="'/carrinho'">Volte ao carrinho</a> para criar pedidos</p>
+    }
+    @else {
+        <div class="pedidos">
+            @for(pedido of this.pedidosService.getPedidos(); track pedido.id) {
+                <div class="pedido">
+                    <div>
+                        <p>ID: {{ pedido.id }}</p>
+                        <div class="pedido-situacao">
+                        <span>Situação:</span>
+
+                        <span
+                            class="situacao-badge"
+                            [class]="'situacao-badge situacao-' + pedido.situacao.toLowerCase()">
+                            {{ pedido.situacao.replaceAll('_', ' ') }}
+                        </span>
+                    </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      (click)="this.mostrarProdutosPedido(pedido.id)">
+                      Ver produtos
+                    </button>
+
+                    <button
+                        type="button"
+                        class="remover-pedido"
+                        aria-label="Remover pedido"
+                        (click)="this.removerPedido(pedido.id)">
+                        <img src="/trash.svg" alt="">
+                    </button>
+                </div>
+            }
+        </div>
+    }
+
+    @if (mostrarProdutosPedidoSignal()) {
+      <div class="dialog-overlay" (click)="fecharDialog()">
+          <section
+              class="dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="dialog-titulo"
+              (click)="$event.stopPropagation()">
+
+              <header class="dialog-header">
+                  <h2 id="dialog-titulo">
+                      Produtos do pedido #{{ pedidoId }}
+                  </h2>
+
+                  <button
+                      type="button"
+                      class="botao-fechar"
+                      aria-label="Fechar"
+                      (click)="fecharDialog()">
+                      &times;
+                  </button>
+              </header>
+
+              <div class="dialog-conteudo">
+                  @for (produto of produtosPedido(); track produto.id) {
+                      <div class="produto">
+                          <p>{{ produto.nome }}</p>
+                          <p>Quantidade disponível: {{ produtosService.getQuantidadeDisponivel(produto) }}</p>
+                          <p>Categoria: {{ produto.categoria }}</p>
+                      </div>
+                  }
+              </div>
+
+              <footer class="dialog-footer">
+                  <button type="button" (click)="fecharDialog()">
+                      Fechar
+                  </button>
+              </footer>
+          </section>
+      </div>
+  }
+</main>

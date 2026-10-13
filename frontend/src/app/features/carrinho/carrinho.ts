@@ -3,6 +3,7 @@ import { CarrinhoService } from '../services/carrinho'
 import { ProdutosService } from '../services/produtos';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { PedidosService } from '../services/pedidos';
 
 @Component({
   imports: [RouterLink, FormsModule],
@@ -11,6 +12,7 @@ import { FormsModule } from '@angular/forms';
   templateUrl: './carrinho.html',
 })
 export class Carrinho {
+  protected pedidosService = inject(PedidosService);
   protected carrinhoService = inject(CarrinhoService);
   protected produtosService = inject(ProdutosService);
 
@@ -35,7 +37,7 @@ export class Carrinho {
         }
     }
 
-    this.carrinhoService.criarPedido().subscribe({
+    this.pedidosService.criarPedido(this.carrinhoService.getProdutosProntos()).subscribe({
       next: () => {
         this.carrinhoService.limpar();
       },

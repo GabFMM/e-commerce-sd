@@ -1,44 +1,39 @@
 import { inject, Service, signal } from '@angular/core';
-import { Produto } from './produtos';
+import { ProdutoDTO } from './produtos';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
 
-interface ProdutoPronto {
+export interface ProdutoPronto {
   produtoId: number,
   // Quantidade desejada pelo usuário
   quantidade: number
 }
 
-interface Pedido {
-  // Relaciona cada produto.id com sua quantidade desejada
-  itens: Record<number, number>;
-}
-
 @Service()
 export class CarrinhoService {
-  private http = inject(HttpClient);
-  private apiUrl = 'http://localhost:8080';
-
   // Produtos com quantidade desejada
   private produtosProntos: ProdutoPronto[] = [];
 
   // Produtos marcados como desejados,
   // mas não foi determinada a quantidade desejada
-  protected produtos = signal<Produto[]>([]);
+  private produtos = signal<ProdutoDTO[]>([]);
 
-  public getProdutos(): Produto[] {
+  public getProdutos(): ProdutoDTO[] {
     return this.produtos();
+  }
+
+  public getProdutosProntos(): ProdutoPronto[] {
+    return this.produtosProntos;
   }
 
   public temProdutoPronto(): boolean {
     return Boolean(this.produtosProntos.length);
   }
 
-  public produtoEstaNoCarrinho(produto: Produto): boolean {
+  public produtoEstaNoCarrinho(produto: ProdutoDTO): boolean {
     return this.produtos().some((p) => p.id === produto.id);
   }
 
-  public adicionarProduto(produto: Produto): void {
+  public adicionarProduto(produto: ProdutoDTO): void {
     // Não inclui duas vezes o mesmo produto
     if(this.produtoEstaNoCarrinho(produto))
       return;
@@ -69,19 +64,5 @@ export class CarrinhoService {
     );
 
     this.produtosProntos = [];
-  }
-
-  public criarPedido(): Observable<void> {
-    const pedido: Pedido = {
-      itens: this.produtosProntos.reduce((itens, produtoPronto) => {
-        itens[produtoPronto.produtoId] = produtoPronto.quantidade;
-        return itens;
-      }, {} as Record<number, number>)
-    };
-
-    return this.http.post<void>(
-      `${this.apiUrl}/pedidos`,
-      pedido
-    );
   }
 }

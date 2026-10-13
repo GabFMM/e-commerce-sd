@@ -1,5 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
-import { Produto, ProdutosService } from '../services/produtos';
+import { ProdutoDTO, ProdutosService } from '../services/produtos';
 import { CarrinhoService } from '../services/carrinho';
 
 @Component({
@@ -12,7 +12,7 @@ export class Catalogo {
   protected carrinhoSerice = inject(CarrinhoService);
   protected produtosService = inject(ProdutosService);
 
-  protected produtos = signal<Produto[]>([]);
+  protected produtos = signal<ProdutoDTO[]>([]);
   protected nomeProduto: string = "";
 
   constructor() {
@@ -37,7 +37,7 @@ export class Catalogo {
     })
   }
 
-  protected AdicionarProdutoCarrinho(produto: Produto): void {
+  protected AdicionarProdutoCarrinho(produto: ProdutoDTO): void {
     this.carrinhoSerice.adicionarProduto(produto);
   }
 }

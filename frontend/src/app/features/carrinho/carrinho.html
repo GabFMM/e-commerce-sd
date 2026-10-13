@@ -1,6 +1,6 @@
 <main>
     @if(!this.carrinhoService.getProdutos().length) {
-        <h1>Você ainda não adicionou nenhum produto ao carrinho!</h1>
+        <h1>Você ainda não adicionou um produto ao carrinho!</h1>
         <p><a [routerLink]="'/catalogo'">Volte ao catálogo</a> para adicionar produtos</p>
     }
     @else {
@@ -11,6 +11,7 @@
 
                     <div>
                         <p>{{ produto.nome }}</p>
+                        <p>{{ produto.categoria }}</p>
                         <p>Quantidade disponível: {{ this.produtosService.getQuantidadeDisponivel(produto) }}</p>
                     </div>
 
