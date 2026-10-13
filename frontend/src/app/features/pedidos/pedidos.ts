@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { PedidosService } from '../services/pedidos';
 import { RouterLink } from '@angular/router';
 import { ProdutoDTO, ProdutosService } from '../services/produtos';
@@ -9,13 +9,21 @@ import { ProdutoDTO, ProdutosService } from '../services/produtos';
   styleUrl: './pedidos.css',
   templateUrl: './pedidos.html',
 })
-export class Pedidos {
+export class Pedidos implements OnInit, OnDestroy {
   protected produtosService = inject(ProdutosService);
   protected pedidosService = inject(PedidosService);
 
   protected mostrarProdutosPedidoSignal = signal(false);
   protected pedidoId: number | null = null;
   protected produtosPedido = signal<ProdutoDTO[]>([]);
+
+  ngOnInit(): void {
+    this.pedidosService.conectarSSE();
+  }
+
+  ngOnDestroy(): void {
+    this.pedidosService.desconectarSSE();
+  }
 
   protected mostrarProdutosPedido(pedidoId: number): void {
     this.pedidoId = pedidoId;

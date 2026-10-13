@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { inject, Service, signal } from '@angular/core';
+import { inject, OnInit, Service, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ProdutoDTO, ProdutosService } from './produtos';
 import { ProdutoPronto } from './carrinho';
@@ -16,8 +16,13 @@ export interface CriarPedidoDTO {
   itens: Record<number, number>;
 }
 
+export interface AtualizarPedidoDTO {
+  id: number;
+  situacao: string;
+}
+
 @Service()
-export class PedidosService {
+export class PedidosService implements OnInit {
   private http = inject(HttpClient);
   private apiUrl = 'http://localhost:8080/pedidos';
 
@@ -25,7 +30,9 @@ export class PedidosService {
 
   private pedidos = signal<PedidoDTO[]>([]);
 
-  constructor() {
+  private eventSource?: EventSource;
+
+  ngOnInit(): void {
     this.obterPedidos().subscribe({
       next: (p) => {
         this.pedidos.set(p);
@@ -88,6 +95,43 @@ export class PedidosService {
       error: (err) => {
         console.error(err);
       }
-    })
+    });
   }
+
+  public conectarSSE(): void {
+      // Evita criar conexões duplicadas.
+      if (this.eventSource) {
+        return;
+      }
+
+      this.eventSource = new EventSource(`${this.apiUrl}/eventos`);
+
+      this.eventSource.addEventListener(
+        'atualizar-pedido',
+        (evento: MessageEvent) => {
+          const atualizacao: AtualizarPedidoDTO = JSON.parse(evento.data);
+
+          this.pedidos.update(pedidos =>
+            pedidos.map(pedido =>
+              pedido.id === atualizacao.id
+                ? {
+                  ...pedido,
+                  situacao: atualizacao.situacao
+                }
+                : pedido
+            )
+          );
+        }
+      );
+
+      this.eventSource.onerror = erro => {
+          console.error('Erro na conexão SSE:', erro);
+          // EventSource tenta reconectar automaticamente.
+      };
+    }
+
+    public desconectarSSE(): void {
+        this.eventSource?.close();
+        this.eventSource = undefined;
+    }
 }

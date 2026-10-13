@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { ProdutoDTO, ProdutosService } from '../services/produtos';
 import { CarrinhoService } from '../services/carrinho';
 
@@ -8,14 +8,14 @@ import { CarrinhoService } from '../services/carrinho';
   styleUrl: './catalogo.css',
   templateUrl: './catalogo.html',
 })
-export class Catalogo {
+export class Catalogo implements OnInit {
   protected carrinhoSerice = inject(CarrinhoService);
   protected produtosService = inject(ProdutosService);
 
   protected produtos = signal<ProdutoDTO[]>([]);
   protected nomeProduto: string = "";
 
-  constructor() {
+  ngOnInit(): void {
     this.produtosService.obterProdutos().subscribe({
       next: (produtos) => {
         this.produtos.set(produtos);
