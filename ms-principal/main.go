@@ -1,27 +1,35 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"crypto/ed25519"
 	"e-commerce-sd/ms-principal/dto"
 	"e-commerce-sd/ms-principal/service"
 	"e-commerce-sd/seguranca"
 	"encoding/json"
-	"fmt"
+	"errors"
+	"io"
 	"log"
-	"math"
+	"net/http"
 	"os"
+	"os/signal"
 	"slices"
-	"strings"
+	"strconv"
+	"sync"
+	"syscall"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 const NomeExchange = "eCommerce"
 const NomeServico = "principal"
 const NomeFila = "principal"
+
+// O *amqp.Channel não é thread-safe para publicar: com HTTP várias
+// requisições podem chamar publicar() ao mesmo tempo.
+var publishMu sync.Mutex
 
 // Encerra o MS
 func failOnError(err error, msg string) {
@@ -37,6 +45,32 @@ func printOnError(err error, msg string) {
 	}
 }
 
+type ItemRequest struct {
+	ProdutoID  int `json:"produto_id" binding:"required,min=1"`
+	Quantidade int `json:"quantidade" binding:"required,min=1"`
+}
+
+type CriarPedidoRequest struct {
+	Itens []ItemRequest `json:"itens" binding:"required,min=1,dive"`
+}
+
+var situacoesValidas = []string{
+	"CRIADO",
+	"ESTOQUE_DISPONIVEL",
+	"ESTOQUE_INDISPONIVEL",
+	"PAGAMENTO_APROVADO",
+	"PAGAMENTO_RECUSADO",
+	"ENVIADO",
+}
+
+type PayloadEvento struct {
+	Tipo     string `json:"tipo"`
+	PedidoID int    `json:"pedido_id"`
+	Situacao string `json:"situacao"`
+}
+
+var sseChan = make(chan PayloadEvento, 100)
+
 func main() {
 	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
 	failOnError(err, "[ERRO-MS-PRINCIPAL] Erro ao conectar ao RabbitMQ")
@@ -51,12 +85,11 @@ func main() {
 	failOnError(err, "[ERRO-MS-PRINCIPAL] Erro ao abrir channel de consume")
 	defer consumeCh.Close()
 
-	// Liga-se na fila de consumidores
 	msgs, err := consumeCh.Consume(
 		NomeFila, // queue
-		"",       // id do consumidor (vazio para o rabbitmq gerar automaticamente)
+		"",       // id do consumidor
 		true,     // auto-ack
-		true,     // exclusive (apenas o ms-estoque lê a fila dele)
+		true,     // exclusive
 		false,    // no-local
 		false,    // no-wait
 		nil,      // args
@@ -69,42 +102,220 @@ func main() {
 	chavePrivada, err := seguranca.CarregarChavePrivada("ms-principal/chaves/principal_private.pem")
 	failOnError(err, "[ERRO-MS-PRINCIPAL] Não foi possível carregar chave privada")
 
-	var forever chan struct{}
+	// Consumer RabbitMQ em goroutine
+	go consumirMensagens(msgs, publishCh, chavePrivada, chavesPublicas)
 
-	// Processa mensagens da fila
+	// API HTTP
+	router := montarRouter(publishCh, chavePrivada)
+
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: router,
+	}
+
 	go func() {
-		for d := range msgs {
-			payload, err := seguranca.AbrirPacote(d.Body, chavesPublicas)
-
-			printOnError(err, "[ERRO-MS-PRINCIPAL] Não foi possível descriptografar/autenticar/interpretar pacote recebido")
-			if err != nil {
-				continue
-			}
-
-			switch d.RoutingKey {
-			case "pagamento.aprovado":
-				pagamentoAprovado(payload)
-			case "pagamento.recusado":
-				pagamentoRecusado(publishCh, chavePrivada, payload)
-			case "pedido.enviado":
-				pedidoEnviado(payload)
-			case "pedido.estoque_ok":
-				estoqueOk(payload)
-			case "estoque.indisponivel":
-				estoqueIndisponivel(publishCh, chavePrivada, payload)
-			default:
-				printOnError(err, "[ERRO-MS-PRINCIPAL] routing key inválida:"+d.RoutingKey)
-			}
+		log.Printf("[INFO-MS-PRINCIPAL] API escutando em %s\n", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Panicf("[ERRO-MS-PRINCIPAL] Erro no servidor HTTP: %s", err)
 		}
 	}()
 
-	// Processa entradas do usuário, junto da exibição do menu
-	go func() {
-		criarMenu(publishCh, chavePrivada)
-	}()
+	// Bloqueia até CTRL+C / SIGTERM
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
 
-	log.Printf(" [*] Waiting for messages. To exit press CTRL+C\n")
-	<-forever
+	log.Println("[INFO-MS-PRINCIPAL] Encerrando...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	printOnError(srv.Shutdown(ctx), "[ERRO-MS-PRINCIPAL] Erro no shutdown do servidor HTTP")
+}
+
+// Monta o roteador Gin com todas as rotas /api/
+func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin.Engine {
+	r := gin.Default()
+	api := r.Group("/api")
+
+	// Método	Rota	          Substitui	            Resposta
+	// GET	    /api/produtos	  visualizarProdutos	200 + lista
+	// POST	    /api/pedidos	  realizarPedidos	    201 + pedido criado
+	// GET	    /api/pedidos	  consultar/listar	    200 + lista (aceita ?situacao=)
+	// GET	    /api/pedidos/:id  consultarPedidoPorId	200 ou 404
+	// DELETE	/api/pedidos/:id  excluirPedidos	    204 ou 404
+	// GET	    /api/eventos	  (novo)	            Stream SSE (fase posterior)
+	{
+		api.GET("/produtos", func(c *gin.Context) {
+			produtos := service.ObterProdutos()
+			if produtos == nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível recuperar produtos"})
+				return
+			}
+			c.JSON(http.StatusOK, produtos)
+		})
+
+		api.POST("/pedidos", func(c *gin.Context) {
+			var req CriarPedidoRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"erro": err.Error()})
+				return
+			}
+
+			itens := make([]service.ItemPedido, 0, len(req.Itens))
+			for _, item := range req.Itens {
+				itens = append(itens, service.ItemPedido{
+					ProdutoId:  item.ProdutoID,
+					Quantidade: item.Quantidade,
+				})
+			}
+
+			id, err := service.CriarPedidoComItens(itens)
+			if err != nil {
+				switch {
+				case errors.Is(err, service.ErrPedidoSemItens),
+					errors.Is(err, service.ErrProdutoInexistente),
+					errors.Is(err, service.ErrItemDuplicado):
+					c.JSON(http.StatusBadRequest, gin.H{"erro": err.Error()})
+				default:
+					c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível criar o pedido"})
+				}
+				return
+			}
+
+			// Só publica depois do commit do pedido
+			err = publicar(publishCh, chavePrivada, "pedido.criado", dto.PedidoDTO{Id: id})
+			printOnError(err, "[ERRO-MS-PRINCIPAL] Pedido criado, mas falhou ao publicar pedido.criado")
+
+			c.JSON(http.StatusCreated, gin.H{"id": id, "situacao": "CRIADO"})
+		})
+
+		api.GET("/pedidos", func(c *gin.Context) {
+			situacao := c.Query("situacao")
+
+			var pedidos []service.Pedido
+
+			if situacao == "" {
+				pedidos = service.ObterPedidos()
+			} else {
+				if !slices.Contains(situacoesValidas, situacao) {
+					c.JSON(http.StatusBadRequest, gin.H{"erro": "situação inválida"})
+					return
+				}
+				pedidos = service.ObterPedidosPorSituacao(situacao)
+			}
+
+			// nil = erro de banco (lista vazia deve vir como []Pedido{}, não nil)
+			if pedidos == nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível consultar os pedidos"})
+				return
+			}
+
+			c.JSON(http.StatusOK, pedidos)
+		})
+
+		api.GET("/pedidos/:id", func(c *gin.Context) {
+			id, err := strconv.Atoi(c.Param("id"))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"erro": "id inválido"})
+				return
+			}
+
+			pedido := service.ObterPedido(id)
+			if pedido == nil {
+				c.JSON(http.StatusNotFound, gin.H{"erro": "pedido não encontrado"})
+				return
+			}
+
+			c.JSON(http.StatusOK, pedido)
+		})
+
+		api.DELETE("/pedidos/:id", func(c *gin.Context) {
+			id, err := strconv.Atoi(c.Param("id"))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"erro": "id inválido"})
+				return
+			}
+
+			// ExcluirPedido só devolve bool, então checamos a existência antes
+			// para conseguir responder 404 em vez de 500.
+			if service.ObterPedido(id) == nil {
+				c.JSON(http.StatusNotFound, gin.H{"erro": "pedido não encontrado"})
+				return
+			}
+
+			if !service.ExcluirPedido(id) {
+				c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível excluir o pedido"})
+				return
+			}
+
+			// Avisa os outros MS
+			err = publicar(publishCh, chavePrivada, "pedido.excluido", dto.PedidoDTO{Id: id})
+			printOnError(err, "[ERRO-MS-PRINCIPAL] Pedido excluído, mas falhou ao publicar pedido.excluido")
+
+			c.Status(http.StatusNoContent) // 204 não tem body
+		})
+
+		api.GET("/eventos", func(c *gin.Context) {
+			c.Writer.Header().Set("Content-Type", "text/event-stream")
+			c.Writer.Header().Set("Cache-Control", "no-cache")
+			c.Writer.Header().Set("Connection", "keep-alive")
+
+			c.Stream(func(w io.Writer) bool {
+				select {
+				case <-c.Request.Context().Done():
+					// Cliente desconectou/fechou a aba
+					return false
+				case evento := <-sseChan:
+					// Envia a mensagem do canal direto para o navegador
+					c.SSEvent("message", evento)
+					return true
+				}
+			})
+		})
+	}
+
+	return r
+}
+
+// Processa mensagens da fila e despacha por routing key.
+// Ajuste o tipo de chavesPublicas para o que CarregarTodasChavesPublicas retorna.
+func consumirMensagens(msgs <-chan amqp.Delivery, publishCh *amqp.Channel,
+	chavePrivada ed25519.PrivateKey, chavesPublicas map[string]ed25519.PublicKey) {
+	for d := range msgs {
+		payload, err := seguranca.AbrirPacote(d.Body, chavesPublicas)
+		printOnError(err, "[ERRO-MS-PRINCIPAL] Não foi possível descriptografar/autenticar/interpretar pacote recebido")
+		if err != nil {
+			continue
+		}
+
+		switch d.RoutingKey {
+		case "pagamento.aprovado":
+			pagamentoAprovado(payload)
+		case "pagamento.recusado":
+			pagamentoRecusado(publishCh, chavePrivada, payload)
+		case "pedido.enviado":
+			pedidoEnviado(payload)
+		case "pedido.estoque_ok":
+			estoqueOk(payload)
+		case "estoque.indisponivel":
+			estoqueIndisponivel(publishCh, chavePrivada, payload)
+		default:
+			log.Printf("[ERRO-MS-PRINCIPAL] routing key inválida: %s\n", d.RoutingKey)
+		}
+	}
+}
+
+func notificarSSE(tipo string, pedidoID int, situacao string) {
+	select {
+	case sseChan <- PayloadEvento{
+		Tipo:     tipo,
+		PedidoID: pedidoID,
+		Situacao: situacao,
+	}:
+	default:
+		log.Printf("[SSE] Sem aba aberta ou canal cheio. Evento '%s' do pedido %d descartado.\n", tipo, pedidoID)
+	}
 }
 
 func pagamentoAprovado(payload json.RawMessage) {
@@ -117,7 +328,7 @@ func pagamentoAprovado(payload json.RawMessage) {
 	}
 
 	service.AtualizarSituacaoPedido(pedidoDTO, "PAGAMENTO_APROVADO")
-	// Não publica nada
+	notificarSSE("pagamento.aprovado", pedidoDTO.Id, "PAGAMENTO_APROVADO")
 }
 
 func pagamentoRecusado(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, payload json.RawMessage) {
@@ -130,6 +341,7 @@ func pagamentoRecusado(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey,
 	}
 
 	service.AtualizarSituacaoPedido(pedidoDTO, "PAGAMENTO_RECUSADO")
+	notificarSSE("pagamento.recusado", pedidoDTO.Id, "PAGAMENTO_RECUSADO")
 
 	publicar(publishCh, chavePrivada, "pedido.excluido", pedidoDTO)
 }
@@ -144,7 +356,7 @@ func pedidoEnviado(payload json.RawMessage) {
 	}
 
 	service.AtualizarSituacaoPedido(pedidoDTO, "ENVIADO")
-	// Não publica nada
+	notificarSSE("pedido.enviado", pedidoDTO.Id, "ENVIADO")
 }
 
 func estoqueOk(payload json.RawMessage) {
@@ -157,7 +369,7 @@ func estoqueOk(payload json.RawMessage) {
 	}
 
 	service.AtualizarSituacaoPedido(pedidoDTO, "ESTOQUE_DISPONIVEL")
-	// Não publica nada
+	notificarSSE("pedido.estoque_ok", pedidoDTO.Id, "ESTOQUE_DISPONIVEL")
 }
 
 func estoqueIndisponivel(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, payload json.RawMessage) {
@@ -170,19 +382,25 @@ func estoqueIndisponivel(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKe
 	}
 
 	service.AtualizarSituacaoPedido(pedidoDTO, "ESTOQUE_INDISPONIVEL")
+	notificarSSE("estoque.indisponivel", pedidoDTO.Id, "ESTOQUE_INDISPONIVEL")
 
 	publicar(publishCh, chavePrivada, "pedido.excluido", pedidoDTO)
 }
 
-func publicar(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, routingKey string, body interface{}) {
+// Cria o pacote assinado e publica no exchange. Seguro para uso concorrente.
+// Retorna erro para que o handler HTTP possa responder 500 se falhar.
+func publicar(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, routingKey string, body interface{}) error {
 	bodyByte, err := seguranca.CriarPacote(body, NomeServico, chavePrivada)
 	if err != nil {
 		log.Printf("[ERRO-MS-PRINCIPAL] Não foi possível criar o pacote para %s: %v\n", routingKey, err)
-		return
+		return err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	publishMu.Lock()
+	defer publishMu.Unlock()
 
 	err = publishCh.PublishWithContext(ctx,
 		NomeExchange, // exchange
@@ -194,380 +412,11 @@ func publicar(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, routingK
 			Body:        bodyByte,
 		},
 	)
-
 	if err != nil {
-		log.Printf("[ERRO-MS-PRINCIPAL] Falha ao publicar pedido.estoque_ok: %v\n", err)
-		return
+		log.Printf("[ERRO-MS-PRINCIPAL] Falha ao publicar %s: %v\n", routingKey, err)
+		return err
 	}
 
 	log.Printf("[INFO-MS-PRINCIPAL] Pacote publicado para %s\n", routingKey)
-}
-
-func lerOpcaoEscolhidaMinMax(min int, max int) int {
-	var opcao int
-
-	_, err := fmt.Scan(&opcao)
-	for err != nil || opcao < min || opcao > max {
-		fmt.Printf("Entrada inválida. Tente novamente\n")
-
-		if err != nil {
-			// Descarta a linha com o texto inválido
-			scanner := bufio.NewScanner(os.Stdin)
-			if scanner.Scan() {
-				_ = scanner.Text() // Consome o texto errado para liberar o buffer
-			}
-		}
-
-		fmt.Printf("Entrada inválida. Tente novamente:\n")
-		_, err = fmt.Scan(&opcao)
-	}
-
-	return opcao
-}
-
-func lerOpcaoEscolhidaListaInt(lista []int) int {
-	var opcao int
-
-	_, err := fmt.Scan(&opcao)
-	for err != nil || !slices.Contains(lista, opcao) {
-		fmt.Printf("Entrada inválida. Tente novamente\n")
-
-		if err != nil {
-			// Descarta a linha com o texto inválido
-			scanner := bufio.NewScanner(os.Stdin)
-			if scanner.Scan() {
-				_ = scanner.Text() // Consome o texto errado para liberar o buffer
-			}
-		}
-
-		fmt.Print("Entrada inválida. Tente novamente:")
-		_, err = fmt.Scan(&opcao)
-	}
-
-	return opcao
-}
-
-func lerOpcaoEscolhidaListaStr(lista []string) string {
-	var opcao string
-
-	_, err := fmt.Scan(&opcao)
-	for err != nil || !slices.Contains(lista, opcao) {
-		fmt.Printf("Entrada inválida. Tente novamente\n")
-
-		if err != nil {
-			// Descarta a linha com o texto inválido
-			scanner := bufio.NewScanner(os.Stdin)
-			if scanner.Scan() {
-				_ = scanner.Text() // Consome o texto errado para liberar o buffer
-			}
-		}
-
-		fmt.Print("Entrada inválida. Tente novamente:")
-		_, err = fmt.Scan(&opcao)
-	}
-
-	return opcao
-}
-
-func criarMenu(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
-	for {
-		fmt.Println(">> MENU PRINCIPAL <<")
-		fmt.Println("")
-		fmt.Println("Digite o número de uma opção:")
-		fmt.Println("1 - Visualizar produtos")
-		fmt.Println("2 - Realizar pedidos")
-		fmt.Println("3 - Excluir pedidos")
-		fmt.Println("4 - Consultar pedidos e respectivos status")
-		fmt.Println("")
-
-		opcao := lerOpcaoEscolhidaMinMax(1, 4)
-
-		switch opcao {
-		case 1:
-			visualizarProdutos(publishCh, chavePrivada)
-		case 2:
-			realizarPedidos(publishCh, chavePrivada)
-		case 3:
-			excluirPedidos(publishCh, chavePrivada)
-		case 4:
-			consultarPedidos(publishCh, chavePrivada)
-		}
-	}
-}
-
-func visualizarProdutos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
-	produtos := service.ObterProdutos()
-
-	if produtos == nil {
-		fmt.Println("Não foi possível recuperar produtos")
-		fmt.Println("")
-	} else {
-		for _, produto := range produtos {
-			fmt.Printf("PRODUTO %d:\n", produto.Id)
-			fmt.Printf("- Nome: %s\n", produto.Nome)
-			fmt.Printf("- Categoria: %s\n", produto.Categoria)
-			fmt.Printf("- Quantidade disponível: %d\n", produto.QuantidadeDisponivel)
-
-			fmt.Println("")
-		}
-	}
-
-	fmt.Println("Digite 1 para voltar ao menu principal")
-	lerOpcaoEscolhidaMinMax(1, 1)
-}
-
-func realizarPedidos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
-	pedidoId, criado := service.CriarPedido()
-
-	if !criado {
-		fmt.Println("Não foi possível criar seu pedido")
-		fmt.Println("")
-		fmt.Println("Digite 1 para voltar ao menu principal")
-		lerOpcaoEscolhidaMinMax(1, 1)
-
-		return
-	}
-
-	produtos := service.ObterProdutos()
-
-	if produtos == nil {
-		fmt.Println("Não há produtos cadastrados")
-		fmt.Println("")
-		fmt.Println("Digite 1 para voltar ao menu principal")
-		lerOpcaoEscolhidaMinMax(1, 1)
-
-		return
-	} else {
-		resposta := "S"
-
-		for strings.ToUpper(resposta) == "S" {
-			var ids []int
-
-			for _, produto := range produtos {
-				ids = append(ids, produto.Id)
-
-				fmt.Printf("%s:\n", produto.Nome)
-				fmt.Printf("- ID: %d\n", produto.Id)
-				fmt.Printf("- Categoria: %s\n", produto.Categoria)
-				fmt.Printf("- Quantidade disponível: %d\n", produto.QuantidadeDisponivel)
-				fmt.Println("")
-			}
-
-			// -- ID do produto
-			fmt.Println("Digite o ID do produto a ser adicionado no pedido:")
-			fmt.Println("")
-
-			produtoId := lerOpcaoEscolhidaListaInt(ids)
-			// --
-
-			// -- Quantidade do produto
-			var quantidadeMax int
-
-			for _, produto := range produtos {
-				if produto.Id == produtoId {
-					quantidadeMax = produto.QuantidadeDisponivel
-					break
-				}
-			}
-
-			fmt.Println("Digite a quantidade desejada do produto:")
-			fmt.Println("")
-
-			quantidade := lerOpcaoEscolhidaMinMax(1, quantidadeMax)
-			// --
-
-			if !service.AdicionarProdutoPedido(pedidoId, produtoId, quantidade) {
-				fmt.Println("Não foi possível adicionar o produto ao pedido.")
-				fmt.Println("")
-			} else {
-				fmt.Println("Sucesso. Produto adicionado ao pedido.")
-				fmt.Println("")
-			}
-
-			fmt.Println("Deseja adicionar outro produto ao mesmo pedido? (S/N)")
-			resposta = lerOpcaoEscolhidaListaStr([]string{"S", "N", "s", "n"})
-
-			fmt.Println("")
-		}
-
-		var pedido dto.PedidoDTO
-		pedido.Id = pedidoId
-
-		publicar(publishCh, chavePrivada, "pedido.criado", pedido)
-
-		fmt.Println("Digite 1 para voltar ao menu principal")
-		lerOpcaoEscolhidaMinMax(1, 1)
-
-		return
-	}
-}
-
-func excluirPedidos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
-	fmt.Println("Deseja visualizar os pedidos antes de excluir? (S/N)")
-	respostaVisualizar := lerOpcaoEscolhidaListaStr([]string{"S", "N", "s", "n"})
-
-	if strings.ToUpper(respostaVisualizar) == "S" {
-		pedidos := service.ObterPedidos()
-
-		if pedidos == nil {
-			fmt.Println("Não foi possível recuperar seus pedidos")
-			fmt.Println("")
-		} else if len(pedidos) == 0 {
-			fmt.Println("Não há pedidos cadastrados")
-			fmt.Println("")
-		} else {
-			for _, pedido := range pedidos {
-				fmt.Printf("PEDIDO %d:\n", pedido.Id)
-				fmt.Printf("- Situacao: %s\n", pedido.Situacao)
-				fmt.Println("- Pedidos:")
-
-				for chave, valor := range pedido.Produtos {
-					fmt.Printf("\t=> %s (%d)\n", chave, valor)
-				}
-
-				fmt.Println("")
-			}
-		}
-	}
-
-	resposta := "S"
-
-	for strings.ToUpper(resposta) == "S" {
-		pedidos := service.ObterPedidos()
-
-		if pedidos == nil {
-			fmt.Println("Não foi possível recuperar seus pedidos")
-			fmt.Println("")
-			break
-		}
-
-		if len(pedidos) == 0 {
-			fmt.Println("Não há pedidos cadastrados")
-			fmt.Println("")
-			break
-		}
-
-		var ids []int
-
-		fmt.Println("Pedidos disponíveis para exclusão:")
-		fmt.Println("")
-
-		for _, pedido := range pedidos {
-			ids = append(ids, pedido.Id)
-		}
-
-		fmt.Println("Digite o ID do pedido a ser excluído:")
-		fmt.Println("")
-
-		pedidoId := lerOpcaoEscolhidaListaInt(ids)
-
-		if !service.ExcluirPedido(pedidoId) {
-			fmt.Println("Não foi possível excluir o pedido.")
-			fmt.Println("")
-		} else {
-			fmt.Println("Sucesso. Pedido excluído.")
-			fmt.Println("")
-		}
-
-		fmt.Println("Deseja excluir outro pedido? (S/N)")
-		resposta = lerOpcaoEscolhidaListaStr([]string{"S", "N", "s", "n"})
-
-		fmt.Println("")
-	}
-
-	fmt.Println("Digite 1 para voltar ao menu principal")
-	lerOpcaoEscolhidaMinMax(1, 1)
-}
-
-func consultarPedidos(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
-	fmt.Println("Como deseja consultar os pedidos?")
-	fmt.Println("")
-	fmt.Println("1 - Por ID")
-	fmt.Println("2 - Por status/situação")
-	fmt.Println("")
-
-	opcao := lerOpcaoEscolhidaMinMax(1, 2)
-
-	switch opcao {
-	case 1:
-		consultarPedidoPorId()
-	case 2:
-		consultarPedidosPorSituacao()
-	}
-
-	fmt.Println("Digite 1 para voltar ao menu principal")
-	lerOpcaoEscolhidaMinMax(1, 1)
-}
-
-func consultarPedidoPorId() {
-	fmt.Println("Digite o ID do pedido que deseja consultar:")
-	fmt.Println("")
-
-	pedidoId := lerOpcaoEscolhidaMinMax(1, math.MaxInt32)
-
-	pedido := service.ObterPedido(pedidoId)
-
-	if pedido == nil {
-		fmt.Println("Pedido não encontrado")
-		fmt.Println("")
-	} else {
-		fmt.Printf(
-			"Pedido %d - Situação: %s\n",
-			pedido.Id,
-			pedido.Situacao,
-		)
-		fmt.Println("")
-	}
-}
-
-func consultarPedidosPorSituacao() {
-	fmt.Println("Digite a situação dos pedidos que deseja consultar:")
-	fmt.Println("")
-	fmt.Println("1 - CRIADO")
-	fmt.Println("2 - ESTOQUE_DISPONIVEL")
-	fmt.Println("3 - ESTOQUE_INDISPONIVEL")
-	fmt.Println("4 - PAGAMENTO_APROVADO")
-	fmt.Println("5 - PAGAMENTO_RECUSADO")
-	fmt.Println("6 - ENVIADO")
-	fmt.Println("")
-
-	opcao := lerOpcaoEscolhidaMinMax(1, 6)
-
-	situacoes := []string{
-		"CRIADO",
-		"ESTOQUE_DISPONIVEL",
-		"ESTOQUE_INDISPONIVEL",
-		"PAGAMENTO_APROVADO",
-		"PAGAMENTO_RECUSADO",
-		"ENVIADO",
-	}
-
-	situacao := situacoes[opcao-1]
-
-	pedidos := service.ObterPedidosPorSituacao(situacao)
-
-	if pedidos == nil {
-		fmt.Println("Não foi possível consultar os pedidos")
-		fmt.Println("")
-		return
-	}
-
-	if len(pedidos) == 0 {
-		fmt.Printf("Não existem pedidos com a situação %s\n", situacao)
-		fmt.Println("")
-		return
-	}
-
-	fmt.Printf("Pedidos com situação %s:\n", situacao)
-	fmt.Println("")
-
-	for _, pedido := range pedidos {
-		fmt.Printf(
-			"Pedido %d - Situação: %s\n",
-			pedido.Id,
-			pedido.Situacao,
-		)
-	}
-
-	fmt.Println("")
+	return nil
 }
