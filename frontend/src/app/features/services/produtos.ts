@@ -11,7 +11,7 @@ export interface Produto {
 }
 
 @Service()
-export class Produtos {
+export class ProdutosService {
     private http = inject(HttpClient);
     private apiUrl = 'http://localhost:8080';
 
@@ -24,5 +24,13 @@ export class Produtos {
         }
 
         return this.http.get<Produto[]>(`${this.apiUrl}/produtos`, { params });
-  }
+    }
+
+    public estaDisponivel(produto: Produto): boolean {
+        return Boolean(this.getQuantidadeDisponivel(produto));
+    }
+
+    public getQuantidadeDisponivel(produto: Produto): number {
+        return produto.quantidade - produto.reservados
+    }
 }

@@ -23,11 +23,5 @@
 body {
   margin: 0;
   background-color: var(--color-surface-light);
-  color: var(--color-text);
   font-family: Inter, Arial, sans-serif;
-}
-
-button {
-  background-color: var(--color-accent);
-  color: var(--color-surface);
 }

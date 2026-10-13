@@ -1,0 +1,47 @@
+<main>
+    @if(!this.carrinhoService.getProdutos().length) {
+        <h1>Você ainda não adicionou nenhum produto ao carrinho!</h1>
+        <p><a [routerLink]="'/catalogo'">Volte ao catálogo</a> para adicionar produtos</p>
+    }
+    @else {
+        <div class="produtos">
+            @for(produto of this.carrinhoService.getProdutos(); track produto.id) {
+                <div class="produto">
+                    <img src="/imagem.png" [alt]="produto.nome">
+
+                    <div>
+                        <p>{{ produto.nome }}</p>
+                        <p>Quantidade disponível: {{ this.produtosService.getQuantidadeDisponivel(produto) }}</p>
+                    </div>
+
+                    <div>
+                        <label [for]="'quantidade-' + produto.id"> Quantidade desejada:</label>
+
+                        <input
+                            type="number"
+                            [id]="'quantidade-' + produto.id"
+                            [name]="'quantidade-' + produto.id"
+                            [(ngModel)]="quantidadesDesejadas"
+                            min="1"
+                            [max]="this.produtosService.getQuantidadeDisponivel(produto)">
+                    </div>
+
+                    <button
+                        type="button"
+                        class="remover-produto"
+                        aria-label="Remover produto do carrinho">
+                        <img src="/trash.svg" alt="">
+                    </button>
+                </div>
+            }
+        </div>
+
+        <button 
+            type="button"
+            title="Somente estarão inclusos no pedido os produtos que tiverem uma quantidade desejada informada"
+            [disabled]="this.desabilitarBotaoCriarPedido()"
+            (click)="this.criarPedido()">
+            Criar pedido
+        </button>
+    }
+</main>

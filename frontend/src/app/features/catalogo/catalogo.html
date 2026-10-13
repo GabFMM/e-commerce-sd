@@ -12,11 +12,40 @@
             alt="lupa"
             (click)="pesquisarProdutos()">
     </div>
+
     <div class="produtos">
-        @for (produto of produtos; track produto.id) {
+        @for (produto of produtos(); track produto.id) {
             <div class="produto">
                 <img src="/imagem.svg" [alt]="produto.nome">
+
                 <p>{{ produto.nome }}</p>
+                <p>Quantidade disponível: {{ this.produtosService.getQuantidadeDisponivel(produto) }}</p>
+
+                @if(!this.produtosService.estaDisponivel(produto)) {
+                    <button 
+                        type="button"
+                        title="Produto indisponível"
+                        [disabled]="true"
+                        (click)="AdicionarProdutoCarrinho(produto)">
+                        Adicionar no carrinho
+                    </button>
+                }
+                @else if(this.carrinhoSerice.produtoEstaNoCarrinho(produto)) {
+                    <button 
+                        type="button"
+                        title="Produto Já adicionado no carrinho"
+                        [disabled]="true"
+                        (click)="AdicionarProdutoCarrinho(produto)">
+                        Adicionar no carrinho
+                    </button>
+                }
+                @else {
+                    <button 
+                        type="button"
+                        (click)="AdicionarProdutoCarrinho(produto)">
+                        Adicionar no carrinho
+                    </button>
+                }
             </div>
         }
     </div>

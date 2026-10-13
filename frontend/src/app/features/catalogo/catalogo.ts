@@ -1,5 +1,6 @@
-import { Component, inject } from '@angular/core';
-import { Produto, Produtos } from '../services/produtos';
+import { Component, inject, signal } from '@angular/core';
+import { Produto, ProdutosService } from '../services/produtos';
+import { CarrinhoService } from '../services/carrinho';
 
 @Component({
   imports: [],
@@ -8,15 +9,16 @@ import { Produto, Produtos } from '../services/produtos';
   templateUrl: './catalogo.html',
 })
 export class Catalogo {
-  private produtosService = inject(Produtos);
+  protected carrinhoSerice = inject(CarrinhoService);
+  protected produtosService = inject(ProdutosService);
 
-  protected produtos: Produto[] | null = null;
+  protected produtos = signal<Produto[]>([]);
   protected nomeProduto: string = "";
 
   constructor() {
     this.produtosService.obterProdutos().subscribe({
       next: (produtos) => {
-        this.produtos = produtos;
+        this.produtos.set(produtos);
       },
       error: (err) => {
         console.error(err);
@@ -27,11 +29,15 @@ export class Catalogo {
   protected pesquisarProdutos(): void {
     this.produtosService.obterProdutos(this.nomeProduto).subscribe({
       next: (produtos) => {
-        this.produtos = produtos;
+        this.produtos.set(produtos);
       },
       error: (err) => {
         console.error(err);
       }
     })
+  }
+
+  protected AdicionarProdutoCarrinho(produto: Produto): void {
+    this.carrinhoSerice.adicionarProduto(produto);
   }
 }
