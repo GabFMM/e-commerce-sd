@@ -20,6 +20,7 @@ var Filas = []QueueRoutingKeys{
 	{NomeQueue: "principal", RoutingKeys: []string{"pedido.estoque_ok", "estoque.indisponivel", "pagamento.aprovado", "pagamento.recusado", "pedido.enviado"}},
 	{NomeQueue: "pagamento", RoutingKeys: []string{"pedido.estoque_ok"}},
 	{NomeQueue: "entrega", RoutingKeys: []string{"pagamento.aprovado"}},
+	{NomeQueue: "promocoes", RoutingKeys: []string{"interesse.promocao"}},
 }
 
 const NomeExchange = "eCommerce"

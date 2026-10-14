@@ -8,7 +8,6 @@ import (
 	"e-commerce-sd/seguranca"
 	"encoding/json"
 	"errors"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +17,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/gin-contrib/cors"
 
 	"github.com/gin-gonic/gin"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -69,7 +70,11 @@ type PayloadEvento struct {
 	Situacao string `json:"situacao"`
 }
 
-var sseChan = make(chan PayloadEvento, 100)
+type InteresseDTO struct {
+	Email      string   `json:"email" binding:"required,email"`
+	Categorias []string `json:"categorias"`
+	Acao       string   `json:"acao"` // "CADASTRAR" ou "CANCELAR"
+}
 
 func main() {
 	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
@@ -136,6 +141,13 @@ func main() {
 // Monta o roteador Gin com todas as rotas /api/
 func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin.Engine {
 	r := gin.Default()
+
+	r.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"http://localhost:5173"}, // porta do seu frontend
+		AllowMethods: []string{"GET", "POST", "DELETE", "OPTIONS"},
+		AllowHeaders: []string{"Content-Type"},
+	}))
+
 	api := r.Group("/api")
 
 	// Método	Rota	          Substitui	            Resposta
@@ -256,22 +268,44 @@ func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin
 			c.Status(http.StatusNoContent) // 204 não tem body
 		})
 
-		api.GET("/eventos", func(c *gin.Context) {
-			c.Writer.Header().Set("Content-Type", "text/event-stream")
-			c.Writer.Header().Set("Cache-Control", "no-cache")
-			c.Writer.Header().Set("Connection", "keep-alive")
+		api.GET("/eventos", streamEventos)
 
-			c.Stream(func(w io.Writer) bool {
-				select {
-				case <-c.Request.Context().Done():
-					// Cliente desconectou/fechou a aba
-					return false
-				case evento := <-sseChan:
-					// Envia a mensagem do canal direto para o navegador
-					c.SSEvent("message", evento)
-					return true
-				}
-			})
+		api.POST("/promocoes/interesse", func(c *gin.Context) {
+			var req InteresseDTO
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"erro": err.Error()})
+				return
+			}
+
+			req.Acao = "CADASTRAR"
+			err := publicar(publishCh, chavePrivada, "interesse.promocao", req)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"erro": "falha ao registrar interesse"})
+				return
+			}
+
+			c.JSON(http.StatusCreated, gin.H{"mensagem": "Solicitação de interesse enviada"})
+		})
+
+		api.DELETE("/promocoes/interesse", func(c *gin.Context) {
+			email := c.Query("email")
+			if email == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"erro": "informe o e-mail via ?email="})
+				return
+			}
+
+			req := InteresseDTO{
+				Email: email,
+				Acao:  "CANCELAR",
+			}
+
+			err := publicar(publishCh, chavePrivada, "interesse.promocao", req)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"erro": "falha ao cancelar interesse"})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{"mensagem": "Solicitação de cancelamento enviada"})
 		})
 	}
 
@@ -307,15 +341,11 @@ func consumirMensagens(msgs <-chan amqp.Delivery, publishCh *amqp.Channel,
 }
 
 func notificarSSE(tipo string, pedidoID int, situacao string) {
-	select {
-	case sseChan <- PayloadEvento{
+	sseHub.broadcast(PayloadEvento{
 		Tipo:     tipo,
 		PedidoID: pedidoID,
 		Situacao: situacao,
-	}:
-	default:
-		log.Printf("[SSE] Sem aba aberta ou canal cheio. Evento '%s' do pedido %d descartado.\n", tipo, pedidoID)
-	}
+	})
 }
 
 func pagamentoAprovado(payload json.RawMessage) {
