@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"e-commerce-sd/data"
 	"e-commerce-sd/ms-estoque/dto"
 )
@@ -8,8 +9,8 @@ import (
 // Retorna os produtos com saldo disponível (quantidade - reservados > 0).
 // Ajuste as colunas do SELECT ao seu schema (copie do antigo service.ObterProdutos do MS Principal).
 func ListarProdutosDisponiveis() ([]dto.ProdutoDTO, error) {
-	ctx, pool := data.ConectarBanco()
-	// Removido 'defer pool.Close()' para não encerrar o pool da aplicação
+	ctx := context.Background()
+	pool := data.Pool("ESTOQUE")
 
 	query := `
 		SELECT id, nome, quantidade,(quantidade - reservados) AS disponivel
