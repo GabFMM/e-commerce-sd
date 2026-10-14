@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"e-commerce-sd/data"
 	"e-commerce-sd/ms-estoque/dto"
 	"log"
@@ -9,8 +10,8 @@ import (
 // Retorna true se disponivel, false se indisponivel
 // Quem atualiza a situação do pedido é o MS-PRINCIPAL
 func VerificarDisponibilidade(pedidoDTO dto.PedidoDTO) bool {
-	ctx, pool := data.ConectarBanco()
-	defer pool.Close()
+	ctx := context.Background()
+	pool := data.Pool("ESTOQUE")
 
 	// EXISTS devolve sempre uma linha com um booleano: true se algum item do pedido
 	// pede mais do que o saldo disponível (quantidade - reservados).
@@ -39,8 +40,8 @@ func VerificarDisponibilidade(pedidoDTO dto.PedidoDTO) bool {
 }
 
 func ReservarProdutos(pedidoDTO dto.PedidoDTO) {
-	ctx, pool := data.ConectarBanco()
-	defer pool.Close()
+	ctx := context.Background()
+	pool := data.Pool("ESTOQUE")
 
 	query := `
 		UPDATE produtos p
@@ -67,8 +68,8 @@ func ReservarProdutos(pedidoDTO dto.PedidoDTO) {
 }
 
 func RemoverReservas(pedidoDTO dto.PedidoDTO) {
-	ctx, pool := data.ConectarBanco()
-	defer pool.Close()
+	ctx := context.Background()
+	pool := data.Pool("ESTOQUE")
 
 	// GREATEST evita que "reservados" fique negativo caso o pedido nunca tenha reservado nada.
 	query := `

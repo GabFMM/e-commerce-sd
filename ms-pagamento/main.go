@@ -48,8 +48,6 @@ var (
 
 var httpClient = &http.Client{Timeout: 5 * time.Second}
 
-// ---------- Payloads ----------
-
 // Payload de entrada (pedido.estoque_ok) e de saída (pagamento.aprovado/recusado).
 type PedidoDTO struct {
 	PedidoID int `json:"pedido_id"`
@@ -77,18 +75,14 @@ type webhookRequest struct {
 	Status   string `json:"status" binding:"required"` // "APROVADO" ou "RECUSADO"
 }
 
-// ---------- Serviço ----------
-
 type servico struct {
 	publishCh    *amqp.Channel
 	chavePrivada ed25519.PrivateKey
 
-	// O *amqp.Channel não é thread-safe para publicar: o consumer e o handler
-	// HTTP do webhook publicam em goroutines diferentes.
+	// O *amqp.Channel não é thread-safe para publicar
 	publishMu sync.Mutex
 
 	// Pedidos com cobrança criada e ainda sem resposta do webhook.
-	// Evita processar webhook duplicado ou de um pedido que não conhecemos.
 	pendentesMu sync.Mutex
 	pendentes   map[int]bool
 }
@@ -131,8 +125,6 @@ func (s *servico) publicar(routingKey string, body interface{}) error {
 	log.Printf("[INFO-MS-PAGAMENTO] Publicado %s", routingKey)
 	return nil
 }
-
-// ---------- Integração com o Mock ----------
 
 // Pede ao Mock a criação da cobrança e devolve a URL de checkout.
 func criarCobranca(pedidoID int) (string, error) {

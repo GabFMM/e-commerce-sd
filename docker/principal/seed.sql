@@ -1,4 +1,4 @@
-INSERT INTO produtos (nome, categoria, quantidade) VALUES
+INSERT INTO produtos (nome, categoria) VALUES
     ('Notebook', 'A'),
     ('Mouse', 'B'),
     ('Teclado', 'B'),
