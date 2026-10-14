@@ -65,9 +65,10 @@ var situacoesValidas = []string{
 }
 
 type PayloadEvento struct {
-	Tipo     string `json:"tipo"`
-	PedidoID int    `json:"pedido_id"`
-	Situacao string `json:"situacao"`
+	Tipo        string `json:"tipo"`
+	PedidoID    int    `json:"pedido_id"`
+	Situacao    string `json:"situacao"`
+	UrlCheckout string `json:"url_checkout,omitempty"`
 }
 
 type InteresseDTO struct {
@@ -335,6 +336,8 @@ func consumirMensagens(msgs <-chan amqp.Delivery, publishCh *amqp.Channel,
 			estoqueOk(payload)
 		case "estoque.indisponivel":
 			estoqueIndisponivel(publishCh, chavePrivada, payload)
+		case "pagamento.criado":
+			pagamentoCriado(payload)
 		default:
 			log.Printf("[ERRO-MS-PRINCIPAL] routing key inválida: %s\n", d.RoutingKey)
 		}
@@ -450,4 +453,21 @@ func publicar(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, routingK
 
 	log.Printf("[INFO-MS-PRINCIPAL] Pacote publicado para %s\n", routingKey)
 	return nil
+}
+func pagamentoCriado(payload json.RawMessage) {
+	var ev struct {
+		PedidoID    int    `json:"pedido_id"`
+		UrlCheckout string `json:"url_checkout"`
+	}
+	if err := json.Unmarshal(payload, &ev); err != nil {
+		printOnError(err, "[ERRO-MS-PRINCIPAL] Não foi possível desserializar payload recebido")
+		return
+	}
+	// A situação do pedido não muda aqui: segue ESTOQUE_DISPONIVEL
+	sseHub.broadcast(PayloadEvento{
+		Tipo:        "pagamento.criado",
+		PedidoID:    ev.PedidoID,
+		Situacao:    "ESTOQUE_DISPONIVEL",
+		UrlCheckout: ev.UrlCheckout,
+	})
 }
