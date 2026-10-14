@@ -159,64 +159,14 @@ func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin
 	{
 		// A lista de produtos vem do MS Estoque (REST), não do banco do Principal
 		api.GET("/produtos", func(c *gin.Context) {
-			corpoJSON, err := service.ObterProdutosDoEstoque()
+			corpoJSON, err := service.ObterProdutosDoEstoque(c.Request.URL.RawQuery)
+
 			if err != nil {
 				log.Printf("[ERRO-MS-PRINCIPAL] Falha ao consultar MS Estoque: %v", err)
 				c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível recuperar produtos"})
 				return
 			}
 			c.Data(http.StatusOK, "application/json; charset=utf-8", corpoJSON)
-		})
-
-			var ids []int
-
-			itens := make([]service.ItemPedido, 0, len(req.Itens))
-			itensEvento := make([]dto.ItemDTO, 0, len(req.Itens))
-			for _, item := range req.Itens {
-				itens = append(itens, service.ItemPedido{
-					ProdutoId:  item.ProdutoID,
-					Quantidade: item.Quantidade,
-				})
-				itensEvento = append(itensEvento, dto.ItemDTO{
-					ProdutoId:  item.ProdutoID,
-					Quantidade: item.Quantidade,
-				})
-			}
-
-			id, err := service.CriarPedidoComItens(itens)
-			if err != nil {
-				switch {
-				case errors.Is(err, service.ErrPedidoSemItens),
-					errors.Is(err, service.ErrProdutoInexistente),
-					errors.Is(err, service.ErrItemDuplicado):
-					c.JSON(http.StatusBadRequest, gin.H{"erro": err.Error()})
-				default:
-					c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível criar o pedido"})
-				}
-
-				ids = append(ids, id)
-			}
-
-			produtos := service.ObterProdutosFiltros(
-				nome,
-				nomePresente,
-				ids,
-				len(idsQuery) > 0,
-			)
-
-			if produtos == nil {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"erro": "não foi possível recuperar produtos",
-				})
-				return
-			}
-
-			// Só publica depois do commit do pedido.
-			// O evento leva os itens: o MS Estoque tem banco próprio e não consegue lê-los daqui.
-			err = publicar(publishCh, chavePrivada, "pedido.criado", dto.PedidoCriadoDTO{Id: id, Itens: itensEvento})
-			printOnError(err, "[ERRO-MS-PRINCIPAL] Pedido criado, mas falhou ao publicar pedido.criado")
-
-			c.JSON(http.StatusCreated, gin.H{"id": id, "situacao": "CRIADO"})
 		})
 
 		api.GET("/pedidos", func(c *gin.Context) {
