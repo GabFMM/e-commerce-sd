@@ -1,0 +1,51 @@
+services:
+  db-estoque:
+    build: ./estoque
+    container_name: db_estoque
+    environment:
+      POSTGRES_DB: ${ESTOQUE_DB_NAME}
+      POSTGRES_USER: ${ESTOQUE_DB_USER}
+      POSTGRES_PASSWORD: ${ESTOQUE_DB_PASS}
+    ports:
+      - "${ESTOQUE_DB_PORT}:5432"
+    volumes:
+      - pgdata_estoque:/var/lib/postgresql/data
+
+  db-principal:
+    build: ./principal
+    container_name: db_principal
+    environment:
+      POSTGRES_DB: ${PRINCIPAL_DB_NAME}
+      POSTGRES_USER: ${PRINCIPAL_DB_USER}
+      POSTGRES_PASSWORD: ${PRINCIPAL_DB_PASS}
+    ports:
+      - "${PRINCIPAL_DB_PORT}:5432"
+    volumes:
+      - pgdata_principal:/var/lib/postgresql/data
+
+  db-promocoes:
+    build: ./promocoes
+    container_name: db_promocoes
+    environment:
+      POSTGRES_DB: ${PROMOCOES_DB_NAME}
+      POSTGRES_USER: ${PROMOCOES_DB_USER}
+      POSTGRES_PASSWORD: ${PROMOCOES_DB_PASS}
+    ports:
+      - "${PROMOCOES_DB_PORT}:5432"
+    volumes:
+      - pgdata_promocoes:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+
+volumes:
+  pgdata_estoque:
+  pgdata_principal:
+  pgdata_promocoes:
