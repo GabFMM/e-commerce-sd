@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -38,6 +39,7 @@ func AtualizarSituacaoPedido(pedidoDTO dto.PedidoDTO, novaSituacao string) {
 			novaSituacao,
 			err,
 		)
+		return
 	}
 
 	log.Printf("[INFO-MS-PRINCIPAL] Situação do pedido atualizada. pedidoId=%d, novaSituacao=%s",
@@ -59,6 +61,9 @@ func ObterPedidos() []Pedido {
         FROM pedidos
         INNER JOIN pedidos_produtos
             ON pedidos_produtos.pedido_id = pedidos.id
+        INNER JOIN produtos
+            ON produtos.id = pedidos_produtos.produto_id
+        ORDER BY pedidos.id
     `
 
 	rows, err := pool.Query(ctx, query)
@@ -119,103 +124,22 @@ func ObterPedidos() []Pedido {
 		pedidos = append(pedidos, *pedido)
 	}
 
+	// Iterar um map não tem ordem fixa: ordena por id para a lista não "pular" a cada chamada
+	sort.Slice(pedidos, func(i, j int) bool { return pedidos[i].Id < pedidos[j].Id })
+
 	log.Printf("[INFO-MS-PRINCIPAL] Pedidos do usuário recuperados do banco de dados")
 
 	return pedidos
 }
 
-// Retorna o ID do novo pedido e true, se a criação foi um sucesso.
-// Retorna 0 e false, caso contrário.
-func CriarPedido() (int, bool) {
-	ctx := context.Background()
-	pool := data.Pool("PRINCIPAL")
-
-	query := `
-		INSERT INTO pedidos (situacao)
-		VALUES ('CRIADO')
-		RETURNING id
-	`
-
-	var id int
-
-	err := pool.QueryRow(ctx, query).Scan(&id)
-	if err != nil {
-		log.Printf(
-			"[ERRO-MS-PRINCIPAL] Não foi possível criar o pedido: %v",
-			err,
-		)
-		return 0, false
-	}
-
-	log.Printf("[INFO-MS-PRINCIPAL] Pedido %d criado", id)
-	return id, true
-}
-
-func AdicionarProdutoPedido(pedidoId int, produtoId int, quantidade int) bool {
-	ctx := context.Background()
-	pool := data.Pool("PRINCIPAL")
-
-	query := `
-		INSERT INTO pedidos_produtos (pedido_id, produto_id, quantidade)
-		VALUES ($1, $2, $3)
-	`
-
-	_, err := pool.Exec(ctx, query, pedidoId, produtoId, quantidade)
-	if err != nil {
-		log.Printf(
-			"[ERRO-MS-PRINCIPAL] Não foi possível adicionar o produto no pedido. PedidoId=%d, ProdutoId=%d: %v",
-			pedidoId,
-			produtoId,
-			err,
-		)
-		return false
-	}
-
-	log.Printf("[INFO-MS-PRINCIPAL] Produto %d adicionado no Pedido %d", produtoId, pedidoId)
-	return true
-}
-
+// ExcluirPedido apaga o pedido (os itens saem junto, por ON DELETE CASCADE).
+// A devolução do estoque NÃO é feita aqui: o banco do Principal não tem mais
+// "reservados". Quem devolve é o MS Estoque, ao consumir o evento pedido.excluido.
 func ExcluirPedido(pedidoId int) bool {
 	ctx := context.Background()
 	pool := data.Pool("PRINCIPAL")
 
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		log.Printf(
-			"[ERRO-MS-PRINCIPAL] Não foi possível iniciar a transação. PedidoId=%d: %v",
-			pedidoId,
-			err,
-		)
-		return false
-	}
-	defer tx.Rollback(ctx)
-
-	// Devolve ao estoque os produtos reservados pelo pedido.
-	queryAtualizarProdutos := `
-		UPDATE produtos
-		SET reservados = reservados - pp.quantidade
-		FROM pedidos_produtos pp
-		WHERE produtos.id = pp.produto_id
-		AND pp.pedido_id = $1
-	`
-
-	_, err = tx.Exec(ctx, queryAtualizarProdutos, pedidoId)
-	if err != nil {
-		log.Printf(
-			"[ERRO-MS-PRINCIPAL] Não foi possível atualizar as reservas dos produtos. PedidoId=%d: %v",
-			pedidoId,
-			err,
-		)
-		return false
-	}
-
-	// Remove o pedido.
-	queryExcluirPedido := `
-		DELETE FROM pedidos
-		WHERE id = $1
-	`
-
-	resultado, err := tx.Exec(ctx, queryExcluirPedido, pedidoId)
+	resultado, err := pool.Exec(ctx, `DELETE FROM pedidos WHERE id = $1`, pedidoId)
 	if err != nil {
 		log.Printf(
 			"[ERRO-MS-PRINCIPAL] Não foi possível remover o pedido. PedidoId=%d: %v",
@@ -226,19 +150,7 @@ func ExcluirPedido(pedidoId int) bool {
 	}
 
 	if resultado.RowsAffected() == 0 {
-		log.Printf(
-			"[ERRO-MS-PRINCIPAL] Pedido não encontrado. PedidoId=%d",
-			pedidoId,
-		)
-		return false
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		log.Printf(
-			"[ERRO-MS-PRINCIPAL] Não foi possível confirmar a exclusão do pedido. PedidoId=%d: %v",
-			pedidoId,
-			err,
-		)
+		log.Printf("[ERRO-MS-PRINCIPAL] Pedido não encontrado. PedidoId=%d", pedidoId)
 		return false
 	}
 
