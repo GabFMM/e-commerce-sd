@@ -6,14 +6,13 @@ export interface ProdutoDTO {
   id: number,
   nome: string,
   categoria: string,
-  quantidade: number,
-  reservados: number
+  quantidadeDisponivel: number
 }
 
 @Service()
 export class ProdutosService {
   private http = inject(HttpClient);
-  private apiUrl = 'http://localhost:8080/produtos';
+  private apiUrl = 'http://localhost:8080/api/produtos';
 
   public obterProdutos(nome?: string, ids?: number[]): Observable<ProdutoDTO[]> {
     let params = new HttpParams();
@@ -29,13 +28,5 @@ export class ProdutosService {
     }
 
     return this.http.get<ProdutoDTO[]>(`${this.apiUrl}`, { params });
-  }
-
-  public estaDisponivel(produto: ProdutoDTO): boolean {
-    return Boolean(this.getQuantidadeDisponivel(produto));
-  }
-
-  public getQuantidadeDisponivel(produto: ProdutoDTO): number {
-    return produto.quantidade - produto.reservados;
   }
 }

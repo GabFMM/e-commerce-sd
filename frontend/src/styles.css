@@ -25,3 +25,7 @@ body {
   background-color: var(--color-surface-light);
   font-family: Inter, Arial, sans-serif;
 }
+
+img {
+  object-fit: contain;
+}

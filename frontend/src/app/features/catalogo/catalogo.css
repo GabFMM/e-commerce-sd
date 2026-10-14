@@ -1,69 +1,100 @@
 main {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 5vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5vh;
 
-    margin-top: 5vh;
+  padding: 5vh;
 }
 
 .barra-pesquisa {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 
-    width: 100%;
-    max-width: 500px;
-    padding: 10px 15px;
+  width: 100%;
+  max-width: 500px;
+  padding: 10px 15px;
 
-    border: 2px solid var(--color-border);
-    border-radius: 20px;
+  border: 2px solid var(--color-border);
+  border-radius: 20px;
 
-    background-color: var(--color-surface-muted);
-    color: var(--color-text-light);
+  background-color: var(--color-surface-muted);
+  color: var(--color-text-light);
 
-    box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 .barra-pesquisa input {
-    flex: 1;
-    min-width: 0;
+  flex: 1;
+  min-width: 0;
 
-    border: none;
-    outline: none;
-    background: transparent;
+  border: none;
+  outline: none;
+  background: transparent;
 
-    font-size: 16px;
-    color: var(--color-text-light);
+  font-size: 16px;
+  color: var(--color-text-light);
 }
 
 .lupa {
-    width: 25px;
-    height: 25px;
-    object-fit: contain;
-    flex-shrink: 0;
+  width: 25px;
+  height: 25px;
+  object-fit: contain;
+  flex-shrink: 0;
+  cursor: pointer;
 }
 
 .produtos {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 30px;
-
-    width: 80vw;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 30px;
+  width: 80vw;
 }
 
 .produto {
-    background-color: var(--color-primary);
-    color: var(--color-text-light);
-    padding: 20px;
-    flex: 0 1 250px;
-    gap: 20px;
+  background-color: var(--color-primary);
+  color: var(--color-text-light);
+
+  padding: 20px;
+
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 250px;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
 }
 
 .produto img {
-    width: 150px;
-    height: 150px;
-    object-fit: contain;
+  width: 150px;
+  height: 150px;
+  object-fit: contain;
+}
+
+.produto p {
+  margin: 0;
+}
+
+.produto button {
+  background-color: var(--color-accent);
+  color: var(--color-text-light);
+
+  padding: 0.6rem 1.2rem;
+
+  border: 0;
+  border-radius: 999px;
+
+  font-weight: bold;
+  font-size: 0.9rem;
+
+  cursor: pointer;
+}
+
+.produto button:disabled {
+  pointer-events: none;
+  background-color: var(--color-surface-muted);
+  cursor: not-allowed;
 }

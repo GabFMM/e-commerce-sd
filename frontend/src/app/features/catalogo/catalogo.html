@@ -2,7 +2,7 @@
     <div class="barra-pesquisa">
         <input
             type="text"
-            [id]="nomeProduto"
+            [(ngModel)]="nomeProduto"
             placeholder="Pesquise por produtos..."
             (keyup.enter)="pesquisarProdutos()">
 
@@ -16,29 +16,31 @@
     <div class="produtos">
         @for (produto of produtos(); track produto.id) {
             <div class="produto">
-                <img src="/imagem.svg" [alt]="produto.nome">
+                <img src="/imagem.png" [alt]="produto.nome">
 
-                <p>{{ produto.nome }}</p>
+                <p><strong>{{ produto.nome.toUpperCase() }}</strong></p>
                 <p>Categoria: {{ produto.categoria }}</p>
-                <p>Quantidade disponível: {{ this.produtosService.getQuantidadeDisponivel(produto) }}</p>
+                <p>Quantidade disponível: {{ produto.quantidadeDisponivel }}</p>
 
-                @if(!this.produtosService.estaDisponivel(produto)) {
-                    <button
-                        type="button"
-                        title="Produto indisponível"
-                        [disabled]="true"
-                        (click)="AdicionarProdutoCarrinho(produto)">
-                        Adicionar no carrinho
-                    </button>
+                @if(!produto.quantidadeDisponivel) {
+                    <span title="Produto indisponível">
+                        <button
+                            type="button"
+                            [disabled]="true"
+                            (click)="AdicionarProdutoCarrinho(produto)">
+                            Adicionar no carrinho
+                        </button>
+                    </span>
                 }
                 @else if(this.carrinhoSerice.produtoEstaNoCarrinho(produto)) {
-                    <button
-                        type="button"
-                        title="Produto Já adicionado no carrinho"
-                        [disabled]="true"
-                        (click)="AdicionarProdutoCarrinho(produto)">
-                        Adicionar no carrinho
-                    </button>
+                    <span title="Produto Já adicionado no carrinho">
+                        <button
+                            type="button"
+                            [disabled]="true"
+                            (click)="AdicionarProdutoCarrinho(produto)">
+                            Adicionar no carrinho
+                        </button>
+                    </span>
                 }
                 @else {
                     <button

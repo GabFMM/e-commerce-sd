@@ -7,32 +7,35 @@
         <div class="pedidos">
             @for(pedido of this.pedidosService.getPedidos(); track pedido.id) {
                 <div class="pedido">
-                    <div>
-                        <p>ID: {{ pedido.id }}</p>
+                    <div class="pedido-informacoes">
+                        <p class="pedido-id">ID: {{ pedido.id }}</p>
                         <div class="pedido-situacao">
-                        <span>Situação:</span>
+                            <span>Situação:</span>
 
-                        <span
-                            class="situacao-badge"
-                            [class]="'situacao-badge situacao-' + pedido.situacao.toLowerCase()">
-                            {{ pedido.situacao.replaceAll('_', ' ') }}
-                        </span>
+                            <span
+                                class="situacao-badge"
+                                [class]="'situacao-badge situacao-' + pedido.situacao.toLowerCase()">
+                                {{ pedido.situacao.replaceAll('_', ' ') }}
+                            </span>
+                        </div>
                     </div>
+
+                    <div class="pedido-acoes">
+                        <button
+                            type="button"
+                            class="ver-produtos"
+                            (click)="this.mostrarProdutosPedido(pedido.id)">
+                            Ver produtos
+                        </button>
+
+                        <button
+                            type="button"
+                            class="remover-pedido"
+                            aria-label="Remover pedido"
+                            (click)="this.removerPedido(pedido.id)">
+                            <img src="/trash.svg" alt="">
+                        </button>
                     </div>
-
-                    <button
-                      type="button"
-                      (click)="this.mostrarProdutosPedido(pedido.id)">
-                      Ver produtos
-                    </button>
-
-                    <button
-                        type="button"
-                        class="remover-pedido"
-                        aria-label="Remover pedido"
-                        (click)="this.removerPedido(pedido.id)">
-                        <img src="/trash.svg" alt="">
-                    </button>
                 </div>
             }
         </div>
@@ -64,8 +67,8 @@
               <div class="dialog-conteudo">
                   @for (produto of produtosPedido(); track produto.id) {
                       <div class="produto">
-                          <p>{{ produto.nome }}</p>
-                          <p>Quantidade disponível: {{ produtosService.getQuantidadeDisponivel(produto) }}</p>
+                          <p class="produto-nome">{{ produto.nome.toUpperCase() }}</p>
+                          <p>Quantidade requisitada: {{ this.obterQuantidadeRequisitada(produto.id) }}</p>
                           <p>Categoria: {{ produto.categoria }}</p>
                       </div>
                   }

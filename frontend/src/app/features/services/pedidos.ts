@@ -4,35 +4,48 @@ import { Observable } from 'rxjs';
 import { ProdutoDTO, ProdutosService } from './produtos';
 import { ProdutoPronto } from './carrinho';
 
-export interface PedidoDTO {
+export interface PedidoResponse {
   id: number;
   situacao: string;
   // Relaciona cada produto.id com sua quantidade desejada
-  itens: Record<number, number>;
+  produtos: Record<number, number>;
 }
 
-export interface CriarPedidoDTO {
+export interface CriarPedidoRequest {
   // Relaciona cada produto.id com sua quantidade desejada
-  itens: Record<number, number>;
+  itens: Item[];
 }
 
-export interface AtualizarPedidoDTO {
+interface Item {
+  produto_id: number,
+  quantidade: number,
+}
+
+export interface AtualizarPedidoResponse {
   id: number;
   situacao: string;
 }
 
 @Service()
-export class PedidosService implements OnInit {
+export class PedidosService {
   private http = inject(HttpClient);
-  private apiUrl = 'http://localhost:8080/pedidos';
+  private apiUrl = 'http://localhost:8080/api/pedidos';
 
   protected produtosService = inject(ProdutosService);
 
-  private pedidos = signal<PedidoDTO[]>([]);
+  private pedidos = signal<PedidoResponse[]>([]);
 
   private eventSource?: EventSource;
 
-  ngOnInit(): void {
+  constructor() {
+    this.recarregarPedidos();
+  }
+
+  private obterPedidos(): Observable<PedidoResponse[]> {
+    return this.http.get<PedidoResponse[]>(`${this.apiUrl}`);
+  }
+
+  public recarregarPedidos(): void {
     this.obterPedidos().subscribe({
       next: (p) => {
         this.pedidos.set(p);
@@ -43,21 +56,20 @@ export class PedidosService implements OnInit {
     });
   }
 
-  private obterPedidos(): Observable<PedidoDTO[]> {
-    return this.http.get<PedidoDTO[]>(`${this.apiUrl}`);
-  }
-
-  public getPedidos(): PedidoDTO[] {
+  public getPedidos(): PedidoResponse[] {
     return this.pedidos();
   }
 
   public criarPedido(produtosProntos: ProdutoPronto[]): Observable<void> {
-    const pedido: CriarPedidoDTO = {
-      itens: produtosProntos.reduce((itens, produtoPronto) => {
-        itens[produtoPronto.produtoId] = produtoPronto.quantidade;
-        return itens;
-      }, {} as Record<number, number>)
-    };
+    const itens: Item[] = produtosProntos.map(
+      produtoPronto =>
+        ({
+          produto_id: produtoPronto.produtoId,
+          quantidade: produtoPronto.quantidade
+        })
+    );
+
+    const pedido: CriarPedidoRequest = {itens};
 
     return this.http.post<void>(
       `${this.apiUrl}`,
@@ -65,26 +77,31 @@ export class PedidosService implements OnInit {
     );
   }
 
-  public obterProdutosPedido(pedidoId: number): ProdutoDTO[] {
-    let produtosPedido: ProdutoDTO[] = [];
+  public obterProdutosPedido(pedidoId: number): Observable<ProdutoDTO[]> {
+    const pedido = this.pedidos().find(
+      pedido => pedido.id === pedidoId
+    );
 
-    const itens: Record<number, number> = this.pedidos().find(pedido => pedido.id === pedidoId)!.itens;
+    const itens: Record<number, number> = pedido!.produtos;
+    const produtosIds = Object.keys(itens).map(Number);
 
-    const produtosIds: number[] = [];
-    for(const id of Object.keys(itens)) {
-      produtosIds.push(Number(id));
+    return this.produtosService.obterProdutos(
+      undefined,
+      produtosIds
+    );
+  }
+
+  public obterQuantidadeRequisitada(pedidoId: number, produtoId: number): number {
+    const produtos = this.pedidos().find(pedido => pedido.id === pedidoId)!.produtos;
+
+    for(const [id, quantidade] of Object.entries(produtos)) {
+      if(Number(id) === produtoId) {
+        return quantidade;
+      }
     }
 
-    this.produtosService.obterProdutos(undefined, produtosIds).subscribe({
-      next: (produtos) => {
-        produtosPedido = produtos;
-      },
-      error: (err) => {
-        console.error(err);
-      }
-    });
-
-    return produtosPedido;
+    // Erro: nunca ocorre
+    return -1;
   }
 
   public removerPedido(pedidoId: number): void {
@@ -109,7 +126,7 @@ export class PedidosService implements OnInit {
       this.eventSource.addEventListener(
         'atualizar-pedido',
         (evento: MessageEvent) => {
-          const atualizacao: AtualizarPedidoDTO = JSON.parse(evento.data);
+          const atualizacao: AtualizarPedidoResponse = JSON.parse(evento.data);
 
           this.pedidos.update(pedidos =>
             pedidos.map(pedido =>

@@ -27,8 +27,16 @@ export class Pedidos implements OnInit, OnDestroy {
 
   protected mostrarProdutosPedido(pedidoId: number): void {
     this.pedidoId = pedidoId;
-    this.produtosPedido.set(this.pedidosService.obterProdutosPedido(pedidoId));
-    this.mostrarProdutosPedidoSignal.set(true);
+
+    this.pedidosService.obterProdutosPedido(pedidoId).subscribe({
+      next: (produtos) => {
+        this.produtosPedido.set(produtos);
+        this.mostrarProdutosPedidoSignal.set(true);
+      },
+      error: (err) => {
+        console.error('Erro ao obter produtos do pedido:', err);
+      }
+    });
   }
 
   protected removerPedido(pedidoId: number): void {
@@ -38,5 +46,9 @@ export class Pedidos implements OnInit, OnDestroy {
   protected fecharDialog(): void {
     this.pedidoId = null;
     this.mostrarProdutosPedidoSignal.set(false);
+  }
+
+  protected obterQuantidadeRequisitada(produtoId: number): number {
+    return this.pedidosService.obterQuantidadeRequisitada(this.pedidoId!, produtoId);
   }
 }

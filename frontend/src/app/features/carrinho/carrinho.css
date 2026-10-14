@@ -140,12 +140,10 @@ main > p a:focus-visible {
 }
 
 .produto > div:first-of-type p:last-child {
-    font-size: 14px;
     color: var(--color-text-light);
 }
 
 .produto label {
-    font-size: 14px;
     font-weight: 500;
 }
 
@@ -169,7 +167,7 @@ main > p a:focus-visible {
     outline-offset: 2px;
 }
 
-main > button {
+main button {
     padding: 12px 28px;
 
     border: none;
@@ -185,11 +183,17 @@ main > button {
     transition: background-color 0.2s ease;
 }
 
-main > button:hover {
+main button:hover {
     background-color: var(--color-primary);
 }
 
-main > button:focus-visible {
+main button:focus-visible {
     outline: 3px solid var(--color-accent);
     outline-offset: 3px;
+}
+
+main button:disabled {
+    pointer-events: none;
+    background-color: var(--color-surface-muted);
+    cursor: not-allowed;
 }

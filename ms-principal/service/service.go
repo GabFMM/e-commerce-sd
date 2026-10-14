@@ -11,19 +11,19 @@ import (
 )
 
 type Produto struct {
-	Id                   int
-	Nome                 string
-	Categoria            string
-	QuantidadeDisponivel int
+	Id                   int     `json:"id"`
+	Nome                 string  `json:"nome"`
+	Categoria            string  `json:"categoria"`
+	QuantidadeDisponivel int     `json:"quantidadeDisponivel"`
 }
 
 type Pedido struct {
-	Id       int
-	Situacao string
+	Id       int          `json:"id"`
+	Situacao string       `json:"situacao"`
 
-	// Chave corresponde ao nome do produto
+	// Chave corresponde ao ID do produto
 	// Valor corresponde a quantidade requisitada
-	Produtos map[string]int
+	Produtos map[int]int  `json:"produtos"`
 }
 
 func AtualizarSituacaoPedido(pedidoDTO dto.PedidoDTO, novaSituacao string) {
@@ -60,13 +60,11 @@ func ObterPedidos() []Pedido {
         SELECT 
             pedidos.id,
             pedidos.situacao,
-            produtos.nome,
+			pedidos_produtos.produto_id,
             pedidos_produtos.quantidade
         FROM pedidos
         INNER JOIN pedidos_produtos
             ON pedidos_produtos.pedido_id = pedidos.id
-        INNER JOIN produtos
-            ON produtos.id = pedidos_produtos.produto_id
     `
 
 	rows, err := pool.Query(ctx, query)
@@ -84,14 +82,14 @@ func ObterPedidos() []Pedido {
 		var (
 			id          int
 			situacao    string
-			nomeProduto string
+			produto_id  int
 			quantidade  int
 		)
 
 		if err := rows.Scan(
 			&id,
 			&situacao,
-			&nomeProduto,
+			&produto_id,
 			&quantidade,
 		); err != nil {
 			log.Printf(
@@ -107,13 +105,13 @@ func ObterPedidos() []Pedido {
 			pedido = &Pedido{
 				Id:       id,
 				Situacao: situacao,
-				Produtos: make(map[string]int),
+				Produtos: make(map[int]int),
 			}
 
 			pedidosMap[id] = pedido
 		}
 
-		pedido.Produtos[nomeProduto] = quantidade
+		pedido.Produtos[produto_id] = quantidade
 	}
 
 	if err := rows.Err(); err != nil {
@@ -130,6 +128,27 @@ func ObterPedidos() []Pedido {
 	log.Printf("[INFO-MS-PRINCIPAL] Pedidos do usuário recuperados do banco de dados")
 
 	return pedidos
+}
+
+func ObterProdutosFiltros(
+    nomeLike string,
+    nomeLikePresente bool,
+    ids []int,
+    idsPresentes bool,
+) []Produto {
+    if nomeLikePresente && idsPresentes {
+        return ObterProdutosNomeLikeEIds(nomeLike, ids)
+    }
+
+    if nomeLikePresente {
+        return ObterProdutosNomeLike(nomeLike)
+    }
+
+    if idsPresentes {
+        return ObterProdutosIds(ids)
+    }
+
+    return ObterProdutos()
 }
 
 func ObterProdutos() []Produto {
@@ -179,6 +198,178 @@ func ObterProdutos() []Produto {
 	}
 
 	return produtos
+}
+
+func ObterProdutosNomeLike(nomeLike string) []Produto {
+	ctx, pool := data.ConectarBanco()
+	defer pool.Close()
+
+	query := `
+		SELECT 
+			id, 
+			nome, 
+			categoria, 
+			quantidade - reservados AS quantidadeDisponivel
+		FROM produtos
+		WHERE nome ILIKE '%' || $1 || '%'
+	`
+
+	rows, err := pool.Query(ctx, query, nomeLike)
+	if err != nil {
+		log.Printf("[ERRO-MS-PRINCIPAL] Não foi possível recuperar os pedidos do usuário: %v", err)
+		return nil
+	}
+	defer rows.Close()
+
+	var produtos []Produto
+
+	for rows.Next() {
+		var produto Produto
+
+		if err := rows.Scan(
+			&produto.Id,
+			&produto.Nome,
+			&produto.Categoria,
+			&produto.QuantidadeDisponivel,
+		); err != nil {
+			log.Printf(
+				"[ERRO-MS-PRINCIPAL] Falha ao converter registros do banco de dados para struct Produto: %v",
+				err,
+			)
+			continue
+		}
+
+		produtos = append(produtos, produto)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("[ERRO-MS-PRINCIPAL] Erro ao percorrer registros dos produtos: %v", err)
+		return nil
+	}
+
+	return produtos
+}
+
+func ObterProdutosIds(ids []int) []Produto {
+    ctx, pool := data.ConectarBanco()
+    defer pool.Close()
+
+    if len(ids) == 0 {
+        return []Produto{}
+    }
+
+    query := `
+        SELECT
+            id,
+            nome,
+            categoria,
+            quantidade - reservados AS quantidadeDisponivel
+        FROM produtos
+        WHERE id = ANY($1)
+    `
+
+    rows, err := pool.Query(ctx, query, ids)
+    if err != nil {
+        log.Printf(
+            "[ERRO-MS-PRINCIPAL] Não foi possível recuperar os produtos: %v",
+            err,
+        )
+        return nil
+    }
+    defer rows.Close()
+
+    var produtos []Produto
+
+    for rows.Next() {
+        var produto Produto
+
+        if err := rows.Scan(
+            &produto.Id,
+            &produto.Nome,
+            &produto.Categoria,
+            &produto.QuantidadeDisponivel,
+        ); err != nil {
+            log.Printf(
+                "[ERRO-MS-PRINCIPAL] Falha ao converter registros para struct Produto: %v",
+                err,
+            )
+            continue
+        }
+
+        produtos = append(produtos, produto)
+    }
+
+    if err := rows.Err(); err != nil {
+        log.Printf(
+            "[ERRO-MS-PRINCIPAL] Erro ao percorrer registros dos produtos: %v",
+            err,
+        )
+        return nil
+    }
+
+    return produtos
+}
+
+func ObterProdutosNomeLikeEIds(nomeLike string, ids []int) []Produto {
+    ctx, pool := data.ConectarBanco()
+    defer pool.Close()
+
+    if len(ids) == 0 {
+        return []Produto{}
+    }
+
+    query := `
+        SELECT
+            id,
+            nome,
+            categoria,
+            quantidade - reservados AS quantidadeDisponivel
+        FROM produtos
+        WHERE 
+			nome ILIKE '%' || $1 || '%' AND 
+			id = ANY($2)
+    `
+
+    rows, err := pool.Query(ctx, query, ids, nomeLike)
+    if err != nil {
+        log.Printf(
+            "[ERRO-MS-PRINCIPAL] Não foi possível recuperar os produtos: %v",
+            err,
+        )
+        return nil
+    }
+    defer rows.Close()
+
+    var produtos []Produto
+
+    for rows.Next() {
+        var produto Produto
+
+        if err := rows.Scan(
+            &produto.Id,
+            &produto.Nome,
+            &produto.Categoria,
+            &produto.QuantidadeDisponivel,
+        ); err != nil {
+            log.Printf(
+                "[ERRO-MS-PRINCIPAL] Falha ao converter registros para struct Produto: %v",
+                err,
+            )
+            continue
+        }
+
+        produtos = append(produtos, produto)
+    }
+
+    if err := rows.Err(); err != nil {
+        log.Printf(
+            "[ERRO-MS-PRINCIPAL] Erro ao percorrer registros dos produtos: %v",
+            err,
+        )
+        return nil
+    }
+
+    return produtos
 }
 
 // Retorna o ID do novo pedido e true, se a criação foi um sucesso.

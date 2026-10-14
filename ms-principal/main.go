@@ -143,7 +143,7 @@ func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin
 	r := gin.Default()
 
 	r.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"http://localhost:5173"}, // porta do seu frontend
+		AllowOrigins: []string{"http://localhost:4200"}, // porta do seu frontend
 		AllowMethods: []string{"GET", "POST", "DELETE", "OPTIONS"},
 		AllowHeaders: []string{"Content-Type"},
 	}))
@@ -159,47 +159,38 @@ func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin
 	// GET	    /api/eventos	  (novo)	            Stream SSE (fase posterior)
 	{
 		api.GET("/produtos", func(c *gin.Context) {
-			produtos := service.ObterProdutos()
-			if produtos == nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível recuperar produtos"})
-				return
-			}
-			c.JSON(http.StatusOK, produtos)
-		})
+			nome, nomePresente := c.GetQuery("nome_like")
+			idsQuery := c.QueryArray("id")
 
-		api.POST("/pedidos", func(c *gin.Context) {
-			var req CriarPedidoRequest
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"erro": err.Error()})
-				return
-			}
+			var ids []int
 
-			itens := make([]service.ItemPedido, 0, len(req.Itens))
-			for _, item := range req.Itens {
-				itens = append(itens, service.ItemPedido{
-					ProdutoId:  item.ProdutoID,
-					Quantidade: item.Quantidade,
-				})
-			}
-
-			id, err := service.CriarPedidoComItens(itens)
-			if err != nil {
-				switch {
-				case errors.Is(err, service.ErrPedidoSemItens),
-					errors.Is(err, service.ErrProdutoInexistente),
-					errors.Is(err, service.ErrItemDuplicado):
-					c.JSON(http.StatusBadRequest, gin.H{"erro": err.Error()})
-				default:
-					c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível criar o pedido"})
+			for _, idQuery := range idsQuery {
+				id, err := strconv.Atoi(idQuery)
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{
+						"erro": "id inválido: " + idQuery,
+					})
+					return
 				}
+
+				ids = append(ids, id)
+			}
+
+			produtos := service.ObterProdutosFiltros(
+				nome,
+				nomePresente,
+				ids,
+				len(idsQuery) > 0,
+			)
+
+			if produtos == nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"erro": "não foi possível recuperar produtos",
+				})
 				return
 			}
 
-			// Só publica depois do commit do pedido
-			err = publicar(publishCh, chavePrivada, "pedido.criado", dto.PedidoDTO{Id: id})
-			printOnError(err, "[ERRO-MS-PRINCIPAL] Pedido criado, mas falhou ao publicar pedido.criado")
-
-			c.JSON(http.StatusCreated, gin.H{"id": id, "situacao": "CRIADO"})
+			c.JSON(http.StatusOK, produtos)
 		})
 
 		api.GET("/pedidos", func(c *gin.Context) {
@@ -240,6 +231,41 @@ func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin
 			}
 
 			c.JSON(http.StatusOK, pedido)
+		})
+
+		api.POST("/pedidos", func(c *gin.Context) {
+			var req CriarPedidoRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"erro": err.Error()})
+				return
+			}
+
+			itens := make([]service.ItemPedido, 0, len(req.Itens))
+			for _, item := range req.Itens {
+				itens = append(itens, service.ItemPedido{
+					ProdutoId:  item.ProdutoID,
+					Quantidade: item.Quantidade,
+				})
+			}
+
+			id, err := service.CriarPedidoComItens(itens)
+			if err != nil {
+				switch {
+				case errors.Is(err, service.ErrPedidoSemItens),
+					errors.Is(err, service.ErrProdutoInexistente),
+					errors.Is(err, service.ErrItemDuplicado):
+					c.JSON(http.StatusBadRequest, gin.H{"erro": err.Error()})
+				default:
+					c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível criar o pedido"})
+				}
+				return
+			}
+
+			// Só publica depois do commit do pedido
+			err = publicar(publishCh, chavePrivada, "pedido.criado", dto.PedidoDTO{Id: id})
+			printOnError(err, "[ERRO-MS-PRINCIPAL] Pedido criado, mas falhou ao publicar pedido.criado")
+
+			c.JSON(http.StatusCreated, gin.H{"id": id, "situacao": "CRIADO"})
 		})
 
 		api.DELETE("/pedidos/:id", func(c *gin.Context) {
