@@ -159,8 +159,14 @@ func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin
 	// GET	    /api/eventos	  (novo)	            Stream SSE (fase posterior)
 	{
 		api.GET("/produtos", func(c *gin.Context) {
-			nome, nomePresente := c.GetQuery("nome_like")
-			idsQuery := c.QueryArray("id")
+			corpoJSON, err := service.ObterProdutosDoEstoque()
+			if err != nil {
+				log.Printf("[ERRO-MS-PRINCIPAL] Falha ao consultar MS Estoque: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível recuperar produtos"})
+				return
+			}
+			c.Data(http.StatusOK, "application/json; charset=utf-8", corpoJSON)
+		})
 
 			var ids []int
 
