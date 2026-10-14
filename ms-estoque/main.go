@@ -10,7 +10,12 @@ import (
 	"log"
 	"time"
 
+	"net/http"
+	"os"
+
 	amqp "github.com/rabbitmq/amqp091-go"
+
+	"github.com/gin-gonic/gin"
 )
 
 const NomeExchange = "eCommerce"
@@ -29,6 +34,43 @@ func printOnError(err error, msg string) {
 	if err != nil {
 		log.Printf("%s: %s", msg, err)
 	}
+}
+
+func montarRouterEstoque() *gin.Engine {
+	r := gin.Default()
+
+	// GET /produtos -> produtos com saldo disponível (consumido pelo MS Principal)
+	r.GET("/produtos", func(c *gin.Context) {
+		produtos, err := service.ListarProdutosDisponiveis()
+		if err != nil {
+			log.Printf("[ERRO-MS-ESTOQUE] Falha ao consultar produtos: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível consultar os produtos"})
+			return
+		}
+		c.JSON(http.StatusOK, produtos)
+	})
+
+	return r
+}
+
+// Sobe a API REST em uma goroutine. Endereço padrão ":8081" (troque com ESTOQUE_ADDR).
+func iniciarAPIEstoque() {
+	addr := os.Getenv("ESTOQUE_ADDR")
+	if addr == "" {
+		addr = ":8081"
+	}
+
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: montarRouterEstoque(),
+	}
+
+	go func() {
+		log.Printf("[INFO-MS-ESTOQUE] API REST escutando em %s", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Panicf("[ERRO-MS-ESTOQUE] Erro no servidor HTTP: %s", err)
+		}
+	}()
 }
 
 func main() {
@@ -80,10 +122,13 @@ func main() {
 			case "pedido.excluido":
 				removerReservas(payload)
 			default:
-				printOnError(err, "[ERRO-MS-ESTOQUE] routing key inválida:"+d.RoutingKey)
+				log.Printf("[ERRO-MS-ESTOQUE] routing key inválida: %s", d.RoutingKey)
 			}
 		}
 	}()
+
+	// API REST (GET /produtos) consumida pelo MS Principal
+	iniciarAPIEstoque()
 
 	log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
 	<-forever
@@ -141,7 +186,7 @@ func publicar(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, routingK
 	)
 
 	if err != nil {
-		log.Printf("[ERRO-MS-ESTOQUE] Falha ao publicar pedido.estoque_ok: %v", err)
+		log.Printf("[ERRO-MS-ESTOQUE] Falha ao publicar %s: %v", routingKey, err)
 		return
 	}
 

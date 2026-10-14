@@ -1,48 +1,41 @@
 package service
 
 import (
-	"database/sql"
 	"e-commerce-sd/data"
 	"e-commerce-sd/ms-estoque/dto"
-	"errors"
 	"log"
 )
 
 // Retorna true se disponivel, false se indisponivel
 // Quem atualiza a situação do pedido é o MS-PRINCIPAL
 func VerificarDisponibilidade(pedidoDTO dto.PedidoDTO) bool {
-    ctx, pool := data.ConectarBanco()
-    defer pool.Close()
+	ctx, pool := data.ConectarBanco()
+	defer pool.Close()
 
-    query := `
-        SELECT 1
-        FROM produtos p
-        INNER JOIN pedidos_produtos pp
-            ON pp.produto_id = p.id
-        WHERE pp.pedido_id = $1
-          AND (p.quantidade - p.reservados) < pp.quantidade
-        LIMIT 1;
-    `
+	// EXISTS devolve sempre uma linha com um booleano: true se algum item do pedido
+	// pede mais do que o saldo disponível (quantidade - reservados).
+	query := `
+		SELECT EXISTS (
+			SELECT 1
+			FROM produtos p
+			INNER JOIN pedidos_produtos pp
+				ON pp.produto_id = p.id
+			WHERE pp.pedido_id = $1
+			  AND (p.quantidade - p.reservados) < pp.quantidade
+		);
+	`
 
-    row := pool.QueryRow(ctx, query, pedidoDTO.Id)
+	var faltaEstoque bool
+	if err := pool.QueryRow(ctx, query, pedidoDTO.Id).Scan(&faltaEstoque); err != nil {
+		log.Printf(
+			"[ERRO] Não foi possível verificar a disponibilidade do pedido. PedidoId=%d: %v",
+			pedidoDTO.Id,
+			err,
+		)
+		return false
+	}
 
-    err := row.Scan()
-
-    switch {
-    case err == nil:
-        return false
-
-    case errors.Is(err, sql.ErrNoRows):
-        return true
-
-    default:
-        log.Printf(
-            "[ERRO] Não foi possível verificar a disponibilidade do pedido. PedidoId=%d: %v",
-            pedidoDTO.Id,
-            err,
-        )
-        return false
-    }
+	return !faltaEstoque
 }
 
 func ReservarProdutos(pedidoDTO dto.PedidoDTO) {
@@ -77,9 +70,10 @@ func RemoverReservas(pedidoDTO dto.PedidoDTO) {
 	ctx, pool := data.ConectarBanco()
 	defer pool.Close()
 
+	// GREATEST evita que "reservados" fique negativo caso o pedido nunca tenha reservado nada.
 	query := `
 		UPDATE produtos p
-		SET reservados = p.reservados - pp.quantidade
+		SET reservados = GREATEST(p.reservados - pp.quantidade, 0)
 		FROM pedidos_produtos pp
 		WHERE pp.pedido_id = $1
 		  AND pp.produto_id = p.id;
