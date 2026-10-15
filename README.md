@@ -2,7 +2,9 @@
 
 ## Como executar
 
-1. Execute o RabbitMQ
+1. Configure o arquivo *.env*
+
+2. Execute o RabbitMQ
 ```
 docker run -d \
   --hostname rabbitmq \
@@ -13,12 +15,24 @@ docker run -d \
   rabbitmq:4-management
 ```
 
-2. Prepare o ambiente com as configurações necessárias
+3. Prepare o ambiente com as configurações necessárias
 ```
 go run ./setup/main iniciar
 ```
 
-3. Após utilizar o sistema de e-commerce, remova os dados do banco
+4. Execute o MS Principal
+```
+go run ./ms-principal
+```
+
+5. Execute o front-end
+```
+cd frontend
+npm install
+ng serve
+```
+
+5. Após utilizar o sistema de e-commerce, remova os dados do banco
 ```
 go run ./setup/main encerrar
 ```
