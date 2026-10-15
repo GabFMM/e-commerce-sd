@@ -17,7 +17,8 @@ type QueueRoutingKeys struct {
 
 var Filas = []QueueRoutingKeys{
 	{NomeQueue: "estoque", RoutingKeys: []string{"pedido.criado", "pedido.excluido"}},
-	{NomeQueue: "principal", RoutingKeys: []string{"pedido.estoque_ok", "estoque.indisponivel", "pagamento.aprovado", "pagamento.recusado", "pedido.enviado"}},
+	{NomeQueue: "principal", RoutingKeys: []string{"pedido.estoque_ok", "estoque.indisponivel",
+		"pagamento.criado", "pagamento.aprovado", "pagamento.recusado", "pedido.enviado"}},
 	{NomeQueue: "pagamento", RoutingKeys: []string{"pedido.estoque_ok"}},
 	{NomeQueue: "entrega", RoutingKeys: []string{"pagamento.aprovado"}},
 	{NomeQueue: "promocoes", RoutingKeys: []string{"interesse.promocao"}},

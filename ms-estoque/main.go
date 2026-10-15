@@ -3,14 +3,21 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"e-commerce-sd/data"
 	"e-commerce-sd/ms-estoque/dto"
 	"e-commerce-sd/ms-estoque/service"
 	"e-commerce-sd/seguranca"
 	"encoding/json"
+	"errors"
 	"log"
 	"time"
 
+	"net/http"
+	"os"
+
 	amqp "github.com/rabbitmq/amqp091-go"
+
+	"github.com/gin-gonic/gin"
 )
 
 const NomeExchange = "eCommerce"
@@ -31,7 +38,48 @@ func printOnError(err error, msg string) {
 	}
 }
 
+func montarRouterEstoque() *gin.Engine {
+	r := gin.Default()
+
+	// GET /produtos -> produtos com saldo disponível (consumido pelo MS Principal)
+	r.GET("/produtos", func(c *gin.Context) {
+		produtos, err := service.ListarProdutosDisponiveis()
+		if err != nil {
+			log.Printf("[ERRO-MS-ESTOQUE] Falha ao consultar produtos: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível consultar os produtos"})
+			return
+		}
+		c.JSON(http.StatusOK, produtos)
+	})
+
+	return r
+}
+
+// Sobe a API REST em uma goroutine. Endereço padrão ":8081" (troque com ESTOQUE_ADDR).
+func iniciarAPIEstoque() {
+	addr := os.Getenv("ESTOQUE_ADDR")
+	if addr == "" {
+		addr = ":8081"
+	}
+
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: montarRouterEstoque(),
+	}
+
+	go func() {
+		log.Printf("[INFO-MS-ESTOQUE] API REST escutando em %s", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Panicf("[ERRO-MS-ESTOQUE] Erro no servidor HTTP: %s", err)
+		}
+	}()
+}
+
 func main() {
+	// Conecta já na subida: se o banco estiver fora, falha agora e não na 1ª mensagem
+	data.Pool("ESTOQUE")
+	defer data.FecharBancos()
+
 	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
 	failOnError(err, "[ERRO-MS-ESTOQUE] Falha ao conectar no RabbitMQ")
 	defer conn.Close()
@@ -80,29 +128,43 @@ func main() {
 			case "pedido.excluido":
 				removerReservas(payload)
 			default:
-				printOnError(err, "[ERRO-MS-ESTOQUE] routing key inválida:"+d.RoutingKey)
+				log.Printf("[ERRO-MS-ESTOQUE] routing key inválida: %s", d.RoutingKey)
 			}
 		}
 	}()
+
+	// API REST (GET /produtos) consumida pelo MS Principal
+	iniciarAPIEstoque()
 
 	log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
 	<-forever
 }
 
 func verificarDisponibilidade(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, payload json.RawMessage) {
-	var pedidoDTO dto.PedidoDTO
+	var pedido dto.PedidoCriadoDTO
 
-	err := json.Unmarshal(payload, &pedidoDTO)
+	err := json.Unmarshal(payload, &pedido)
 	printOnError(err, "[ERRO-MS-ESTOQUE] Não foi possível desserializar payload recebido")
 	if err != nil {
 		return
 	}
 
-	if service.VerificarDisponibilidade(pedidoDTO) {
-		service.ReservarProdutos(pedidoDTO)
-		publicar(publishCh, chavePrivada, "pedido.estoque_ok", pedidoDTO)
+	disponivel, err := service.ProcessarPedidoCriado(pedido)
+	if errors.Is(err, service.ErrPedidoJaProcessado) {
+		log.Printf("[AVISO-MS-ESTOQUE] pedido.criado duplicado ignorado. PedidoId=%d", pedido.Id)
+		return
+	}
+	if err != nil {
+		// Sem resposta o pedido ficaria parado em CRIADO para sempre
+		log.Printf("[ERRO-MS-ESTOQUE] Falha ao processar pedido %d: %v", pedido.Id, err)
+		disponivel = false
+	}
+
+	resposta := dto.PedidoDTO{Id: pedido.Id}
+	if disponivel {
+		publicar(publishCh, chavePrivada, "pedido.estoque_ok", resposta)
 	} else {
-		publicar(publishCh, chavePrivada, "estoque.indisponivel", pedidoDTO)
+		publicar(publishCh, chavePrivada, "estoque.indisponivel", resposta)
 	}
 }
 
@@ -115,7 +177,8 @@ func removerReservas(payload json.RawMessage) {
 		return
 	}
 
-	service.RemoverReservas(pedidoDTO)
+	err = service.RemoverReservas(pedidoDTO)
+	printOnError(err, "[ERRO-MS-ESTOQUE] Não foi possível remover as reservas")
 	// Não publica nada, conforme requisitos
 }
 
@@ -141,7 +204,7 @@ func publicar(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, routingK
 	)
 
 	if err != nil {
-		log.Printf("[ERRO-MS-ESTOQUE] Falha ao publicar pedido.estoque_ok: %v", err)
+		log.Printf("[ERRO-MS-ESTOQUE] Falha ao publicar %s: %v", routingKey, err)
 		return
 	}
 

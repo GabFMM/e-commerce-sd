@@ -1,21 +1,16 @@
 package service
 
 import (
+	"context"
 	"e-commerce-sd/data"
 	"e-commerce-sd/ms-principal/dto"
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
-
-type Produto struct {
-	Id                   int
-	Nome                 string
-	Categoria            string
-	QuantidadeDisponivel int
-}
 
 type Pedido struct {
 	Id       int
@@ -27,8 +22,8 @@ type Pedido struct {
 }
 
 func AtualizarSituacaoPedido(pedidoDTO dto.PedidoDTO, novaSituacao string) {
-	ctx, pool := data.ConectarBanco()
-	defer pool.Close()
+	ctx := context.Background()
+	pool := data.Pool("PRINCIPAL")
 
 	query := `
         UPDATE pedidos
@@ -44,6 +39,7 @@ func AtualizarSituacaoPedido(pedidoDTO dto.PedidoDTO, novaSituacao string) {
 			novaSituacao,
 			err,
 		)
+		return
 	}
 
 	log.Printf("[INFO-MS-PRINCIPAL] Situação do pedido atualizada. pedidoId=%d, novaSituacao=%s",
@@ -53,8 +49,8 @@ func AtualizarSituacaoPedido(pedidoDTO dto.PedidoDTO, novaSituacao string) {
 }
 
 func ObterPedidos() []Pedido {
-	ctx, pool := data.ConectarBanco()
-	defer pool.Close()
+	ctx := context.Background()
+	pool := data.Pool("PRINCIPAL")
 
 	query := `
         SELECT 
@@ -67,6 +63,7 @@ func ObterPedidos() []Pedido {
             ON pedidos_produtos.pedido_id = pedidos.id
         INNER JOIN produtos
             ON produtos.id = pedidos_produtos.produto_id
+        ORDER BY pedidos.id
     `
 
 	rows, err := pool.Query(ctx, query)
@@ -127,152 +124,22 @@ func ObterPedidos() []Pedido {
 		pedidos = append(pedidos, *pedido)
 	}
 
+	// Iterar um map não tem ordem fixa: ordena por id para a lista não "pular" a cada chamada
+	sort.Slice(pedidos, func(i, j int) bool { return pedidos[i].Id < pedidos[j].Id })
+
 	log.Printf("[INFO-MS-PRINCIPAL] Pedidos do usuário recuperados do banco de dados")
 
 	return pedidos
 }
 
-func ObterProdutos() []Produto {
-	ctx, pool := data.ConectarBanco()
-	defer pool.Close()
-
-	query := `
-		SELECT 
-			id, 
-			nome, 
-			categoria, 
-			quantidade - reservados AS quantidadeDisponivel
-		FROM produtos
-	`
-
-	rows, err := pool.Query(ctx, query)
-	if err != nil {
-		log.Printf("[ERRO-MS-PRINCIPAL] Não foi possível recuperar os pedidos do usuário: %v", err)
-		return nil
-	}
-	defer rows.Close()
-
-	var produtos []Produto
-
-	for rows.Next() {
-		var produto Produto
-
-		if err := rows.Scan(
-			&produto.Id,
-			&produto.Nome,
-			&produto.Categoria,
-			&produto.QuantidadeDisponivel,
-		); err != nil {
-			log.Printf(
-				"[ERRO-MS-PRINCIPAL] Falha ao converter registros do banco de dados para struct Produto: %v",
-				err,
-			)
-			continue
-		}
-
-		produtos = append(produtos, produto)
-	}
-
-	if err := rows.Err(); err != nil {
-		log.Printf("[ERRO-MS-PRINCIPAL] Erro ao percorrer registros dos produtos: %v", err)
-		return nil
-	}
-
-	return produtos
-}
-
-// Retorna o ID do novo pedido e true, se a criação foi um sucesso.
-// Retorna 0 e false, caso contrário.
-func CriarPedido() (int, bool) {
-	ctx, pool := data.ConectarBanco()
-	defer pool.Close()
-
-	query := `
-		INSERT INTO pedidos (situacao)
-		VALUES ('CRIADO')
-		RETURNING id
-	`
-
-	var id int
-
-	err := pool.QueryRow(ctx, query).Scan(&id)
-	if err != nil {
-		log.Printf(
-			"[ERRO-MS-PRINCIPAL] Não foi possível criar o pedido: %v",
-			err,
-		)
-		return 0, false
-	}
-
-	log.Printf("[INFO-MS-PRINCIPAL] Pedido %d criado", id)
-	return id, true
-}
-
-func AdicionarProdutoPedido(pedidoId int, produtoId int, quantidade int) bool {
-	ctx, pool := data.ConectarBanco()
-	defer pool.Close()
-
-	query := `
-		INSERT INTO pedidos_produtos (pedido_id, produto_id, quantidade)
-		VALUES ($1, $2, $3)
-	`
-
-	_, err := pool.Exec(ctx, query, pedidoId, produtoId, quantidade)
-	if err != nil {
-		log.Printf(
-			"[ERRO-MS-PRINCIPAL] Não foi possível adicionar o produto no pedido. PedidoId=%d, ProdutoId=%d: %v",
-			pedidoId,
-			produtoId,
-			err,
-		)
-		return false
-	}
-
-	log.Printf("[INFO-MS-PRINCIPAL] Produto %d adicionado no Pedido %d", produtoId, pedidoId)
-	return true
-}
-
+// ExcluirPedido apaga o pedido (os itens saem junto, por ON DELETE CASCADE).
+// A devolução do estoque NÃO é feita aqui: o banco do Principal não tem mais
+// "reservados". Quem devolve é o MS Estoque, ao consumir o evento pedido.excluido.
 func ExcluirPedido(pedidoId int) bool {
-	ctx, pool := data.ConectarBanco()
-	defer pool.Close()
+	ctx := context.Background()
+	pool := data.Pool("PRINCIPAL")
 
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		log.Printf(
-			"[ERRO-MS-PRINCIPAL] Não foi possível iniciar a transação. PedidoId=%d: %v",
-			pedidoId,
-			err,
-		)
-		return false
-	}
-	defer tx.Rollback(ctx)
-
-	// Devolve ao estoque os produtos reservados pelo pedido.
-	queryAtualizarProdutos := `
-		UPDATE produtos
-		SET reservados = reservados - pp.quantidade
-		FROM pedidos_produtos pp
-		WHERE produtos.id = pp.produto_id
-		AND pp.pedido_id = $1
-	`
-
-	_, err = tx.Exec(ctx, queryAtualizarProdutos, pedidoId)
-	if err != nil {
-		log.Printf(
-			"[ERRO-MS-PRINCIPAL] Não foi possível atualizar as reservas dos produtos. PedidoId=%d: %v",
-			pedidoId,
-			err,
-		)
-		return false
-	}
-
-	// Remove o pedido.
-	queryExcluirPedido := `
-		DELETE FROM pedidos
-		WHERE id = $1
-	`
-
-	resultado, err := tx.Exec(ctx, queryExcluirPedido, pedidoId)
+	resultado, err := pool.Exec(ctx, `DELETE FROM pedidos WHERE id = $1`, pedidoId)
 	if err != nil {
 		log.Printf(
 			"[ERRO-MS-PRINCIPAL] Não foi possível remover o pedido. PedidoId=%d: %v",
@@ -283,19 +150,7 @@ func ExcluirPedido(pedidoId int) bool {
 	}
 
 	if resultado.RowsAffected() == 0 {
-		log.Printf(
-			"[ERRO-MS-PRINCIPAL] Pedido não encontrado. PedidoId=%d",
-			pedidoId,
-		)
-		return false
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		log.Printf(
-			"[ERRO-MS-PRINCIPAL] Não foi possível confirmar a exclusão do pedido. PedidoId=%d: %v",
-			pedidoId,
-			err,
-		)
+		log.Printf("[ERRO-MS-PRINCIPAL] Pedido não encontrado. PedidoId=%d", pedidoId)
 		return false
 	}
 
@@ -304,8 +159,8 @@ func ExcluirPedido(pedidoId int) bool {
 }
 
 func ObterPedido(pedidoId int) *Pedido {
-	ctx, pool := data.ConectarBanco()
-	defer pool.Close()
+	ctx := context.Background()
+	pool := data.Pool("PRINCIPAL")
 
 	query := `
 		SELECT id, situacao
@@ -333,8 +188,8 @@ func ObterPedido(pedidoId int) *Pedido {
 }
 
 func ObterPedidosPorSituacao(situacao string) []Pedido {
-	ctx, pool := data.ConectarBanco()
-	defer pool.Close()
+	ctx := context.Background()
+	pool := data.Pool("PRINCIPAL")
 
 	query := `
         SELECT id, situacao
@@ -395,8 +250,8 @@ func CriarPedidoComItens(itens []ItemPedido) (int, error) {
 		return 0, ErrPedidoSemItens
 	}
 
-	ctx, pool := data.ConectarBanco()
-	defer pool.Close()
+	ctx := context.Background()
+	pool := data.Pool("PRINCIPAL")
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {

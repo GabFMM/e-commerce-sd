@@ -1,7 +1,6 @@
 package main
 
 import (
-	"e-commerce-sd/data"
 	"e-commerce-sd/seguranca"
 	"e-commerce-sd/setup"
 	"log"
@@ -19,9 +18,9 @@ func main() {
 	case "iniciar":
 		setup.ConfigurarFilas()
 		seguranca.GerarChaves()
-		data.IniciarBanco()
-	case "encerrar":
-		data.EncerrarBanco()
+		//data.IniciarBanco()
+	//case "encerrar":
+	//data.EncerrarBanco()
 	default:
 		log.Panic("[ERRO] Argumento na linha de comando é inválido")
 	}

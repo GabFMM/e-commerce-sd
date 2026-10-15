@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"e-commerce-sd/data"
 	"e-commerce-sd/ms-principal/dto"
 	"e-commerce-sd/ms-principal/service"
 	"e-commerce-sd/seguranca"
@@ -65,9 +66,10 @@ var situacoesValidas = []string{
 }
 
 type PayloadEvento struct {
-	Tipo     string `json:"tipo"`
-	PedidoID int    `json:"pedido_id"`
-	Situacao string `json:"situacao"`
+	Tipo        string `json:"tipo"`
+	PedidoID    int    `json:"pedido_id"`
+	Situacao    string `json:"situacao"`
+	UrlCheckout string `json:"url_checkout,omitempty"`
 }
 
 type InteresseDTO struct {
@@ -77,6 +79,10 @@ type InteresseDTO struct {
 }
 
 func main() {
+	// Conecta já na subida: se o banco estiver fora, falha agora e não na 1ª requisição
+	data.Pool("PRINCIPAL")
+	defer data.FecharBancos()
+
 	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
 	failOnError(err, "[ERRO-MS-PRINCIPAL] Erro ao conectar ao RabbitMQ")
 	defer conn.Close()
@@ -150,21 +156,16 @@ func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin
 
 	api := r.Group("/api")
 
-	// Método	Rota	          Substitui	            Resposta
-	// GET	    /api/produtos	  visualizarProdutos	200 + lista
-	// POST	    /api/pedidos	  realizarPedidos	    201 + pedido criado
-	// GET	    /api/pedidos	  consultar/listar	    200 + lista (aceita ?situacao=)
-	// GET	    /api/pedidos/:id  consultarPedidoPorId	200 ou 404
-	// DELETE	/api/pedidos/:id  excluirPedidos	    204 ou 404
-	// GET	    /api/eventos	  (novo)	            Stream SSE (fase posterior)
 	{
+		// A lista de produtos vem do MS Estoque (REST), não do banco do Principal
 		api.GET("/produtos", func(c *gin.Context) {
-			produtos := service.ObterProdutos()
-			if produtos == nil {
+			corpoJSON, err := service.ObterProdutosDoEstoque()
+			if err != nil {
+				log.Printf("[ERRO-MS-PRINCIPAL] Falha ao consultar MS Estoque: %v", err)
 				c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível recuperar produtos"})
 				return
 			}
-			c.JSON(http.StatusOK, produtos)
+			c.Data(http.StatusOK, "application/json; charset=utf-8", corpoJSON)
 		})
 
 		api.POST("/pedidos", func(c *gin.Context) {
@@ -175,8 +176,13 @@ func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin
 			}
 
 			itens := make([]service.ItemPedido, 0, len(req.Itens))
+			itensEvento := make([]dto.ItemDTO, 0, len(req.Itens))
 			for _, item := range req.Itens {
 				itens = append(itens, service.ItemPedido{
+					ProdutoId:  item.ProdutoID,
+					Quantidade: item.Quantidade,
+				})
+				itensEvento = append(itensEvento, dto.ItemDTO{
 					ProdutoId:  item.ProdutoID,
 					Quantidade: item.Quantidade,
 				})
@@ -195,8 +201,9 @@ func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin
 				return
 			}
 
-			// Só publica depois do commit do pedido
-			err = publicar(publishCh, chavePrivada, "pedido.criado", dto.PedidoDTO{Id: id})
+			// Só publica depois do commit do pedido.
+			// O evento leva os itens: o MS Estoque tem banco próprio e não consegue lê-los daqui.
+			err = publicar(publishCh, chavePrivada, "pedido.criado", dto.PedidoCriadoDTO{Id: id, Itens: itensEvento})
 			printOnError(err, "[ERRO-MS-PRINCIPAL] Pedido criado, mas falhou ao publicar pedido.criado")
 
 			c.JSON(http.StatusCreated, gin.H{"id": id, "situacao": "CRIADO"})
@@ -261,7 +268,7 @@ func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin
 				return
 			}
 
-			// Avisa os outros MS
+			// Avisa o MS Estoque, que devolve as reservas no banco dele
 			err = publicar(publishCh, chavePrivada, "pedido.excluido", dto.PedidoDTO{Id: id})
 			printOnError(err, "[ERRO-MS-PRINCIPAL] Pedido excluído, mas falhou ao publicar pedido.excluido")
 
@@ -313,7 +320,6 @@ func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin
 }
 
 // Processa mensagens da fila e despacha por routing key.
-// Ajuste o tipo de chavesPublicas para o que CarregarTodasChavesPublicas retorna.
 func consumirMensagens(msgs <-chan amqp.Delivery, publishCh *amqp.Channel,
 	chavePrivada ed25519.PrivateKey, chavesPublicas map[string]ed25519.PublicKey) {
 	for d := range msgs {
@@ -334,6 +340,8 @@ func consumirMensagens(msgs <-chan amqp.Delivery, publishCh *amqp.Channel,
 			estoqueOk(payload)
 		case "estoque.indisponivel":
 			estoqueIndisponivel(publishCh, chavePrivada, payload)
+		case "pagamento.criado":
+			pagamentoCriado(payload)
 		default:
 			log.Printf("[ERRO-MS-PRINCIPAL] routing key inválida: %s\n", d.RoutingKey)
 		}
@@ -373,7 +381,9 @@ func pagamentoRecusado(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey,
 	service.AtualizarSituacaoPedido(pedidoDTO, "PAGAMENTO_RECUSADO")
 	notificarSSE("pagamento.recusado", pedidoDTO.Id, "PAGAMENTO_RECUSADO")
 
-	publicar(publishCh, chavePrivada, "pedido.excluido", pedidoDTO)
+	// O MS Estoque devolve a reserva ao consumir pedido.excluido
+	err = publicar(publishCh, chavePrivada, "pedido.excluido", pedidoDTO)
+	printOnError(err, "[ERRO-MS-PRINCIPAL] Falha ao publicar pedido.excluido após pagamento recusado")
 }
 
 func pedidoEnviado(payload json.RawMessage) {
@@ -414,7 +424,8 @@ func estoqueIndisponivel(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKe
 	service.AtualizarSituacaoPedido(pedidoDTO, "ESTOQUE_INDISPONIVEL")
 	notificarSSE("estoque.indisponivel", pedidoDTO.Id, "ESTOQUE_INDISPONIVEL")
 
-	publicar(publishCh, chavePrivada, "pedido.excluido", pedidoDTO)
+	err = publicar(publishCh, chavePrivada, "pedido.excluido", pedidoDTO)
+	printOnError(err, "[ERRO-MS-PRINCIPAL] Falha ao publicar pedido.excluido após estoque indisponível")
 }
 
 // Cria o pacote assinado e publica no exchange. Seguro para uso concorrente.
@@ -449,4 +460,22 @@ func publicar(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, routingK
 
 	log.Printf("[INFO-MS-PRINCIPAL] Pacote publicado para %s\n", routingKey)
 	return nil
+}
+
+func pagamentoCriado(payload json.RawMessage) {
+	var ev struct {
+		PedidoID    int    `json:"pedido_id"`
+		UrlCheckout string `json:"url_checkout"`
+	}
+	if err := json.Unmarshal(payload, &ev); err != nil {
+		printOnError(err, "[ERRO-MS-PRINCIPAL] Não foi possível desserializar payload recebido")
+		return
+	}
+	// A situação do pedido não muda aqui: segue ESTOQUE_DISPONIVEL
+	sseHub.broadcast(PayloadEvento{
+		Tipo:        "pagamento.criado",
+		PedidoID:    ev.PedidoID,
+		Situacao:    "ESTOQUE_DISPONIVEL",
+		UrlCheckout: ev.UrlCheckout,
+	})
 }

@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"crypto/ed25519"
+	"e-commerce-sd/data"
+	"e-commerce-sd/ms-promocoes/service"
 	"e-commerce-sd/seguranca"
 	"encoding/json"
 	"fmt"
@@ -12,8 +14,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -36,6 +36,8 @@ func failOnError(err error, msg string) {
 	}
 }
 
+// Catálogo usado só para sortear promoções. O MS Promoções tem banco próprio
+// apenas para os interesses dos clientes (tabela interesses).
 var Produtos = map[string]string{
 	"Notebook":   "A",
 	"Mouse":      "B",
@@ -47,12 +49,6 @@ var Produtos = map[string]string{
 	"Cabo HDMI":  "B",
 }
 
-var categoriasValidas = map[string]bool{
-	"A": true,
-	"B": true,
-	"C": true,
-}
-
 type PromocaoGerada struct {
 	Produto   string `json:"produto"`
 	Desconto  int    `json:"desconto"`
@@ -62,86 +58,8 @@ type PromocaoGerada struct {
 // Payload do evento interesse.promocao publicado pelo MS Principal
 type EventoInteresse struct {
 	Email      string   `json:"email"`
-	Categorias []string `json:"categorias"`
-	Acao       string   `json:"acao"` // "CADASTRAR" ou "CANCELAR"
-}
-
-type GerenciadorInteresse struct {
-	mu       sync.RWMutex
-	clientes map[string]map[string]bool // email -> set de categorias
-}
-
-func NovoGerenciadorInteresse() *GerenciadorInteresse {
-	return &GerenciadorInteresse{
-		clientes: make(map[string]map[string]bool),
-	}
-}
-
-func normalizarEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
-}
-
-func (g *GerenciadorInteresse) Cadastrar(email string, categorias []string) {
-	emailNorm := normalizarEmail(email)
-
-	var validas []string
-	for _, cat := range categorias {
-		catUpper := strings.ToUpper(strings.TrimSpace(cat))
-		if categoriasValidas[catUpper] {
-			validas = append(validas, catUpper)
-		}
-	}
-
-	if len(validas) == 0 {
-		log.Printf("[AVISO-PROMOCOES] Cadastro ignorado para %s: nenhuma categoria válida em %v", emailNorm, categorias)
-		return
-	}
-
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	set, existe := g.clientes[emailNorm]
-	if !existe {
-		set = make(map[string]bool)
-		g.clientes[emailNorm] = set
-	}
-
-	for _, cat := range validas {
-		set[cat] = true
-	}
-
-	log.Printf("[INFO-PROMOCOES] Interesse registrado. Email: %s | Categorias: %v | Novo cliente: %t",
-		emailNorm, validas, !existe)
-}
-
-func (g *GerenciadorInteresse) Remover(email string) {
-	emailNorm := normalizarEmail(email)
-
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	if _, existe := g.clientes[emailNorm]; existe {
-		delete(g.clientes, emailNorm)
-		log.Printf("[INFO-PROMOCOES] Interesse removido. Email: %s", emailNorm)
-		return
-	}
-	log.Printf("[INFO-PROMOCOES] Cancelamento ignorado: %s não estava cadastrado", emailNorm)
-}
-
-func (g *GerenciadorInteresse) ObterEmailsPorCategoria(categoria string) []string {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-
-	catUpper := strings.ToUpper(strings.TrimSpace(categoria))
-	var resultado []string
-
-	for email, setCategorias := range g.clientes {
-		if setCategorias[catUpper] {
-			resultado = append(resultado, email)
-		}
-	}
-
-	return resultado
+	Categorias []string `json:"categorias"` // pode ser vazio/nulo: cliente sem nenhuma categoria
+	Acao       string   `json:"acao"`       // "CADASTRAR" ou "CANCELAR"
 }
 
 func enviarEmailPromocao(destinatario string, prom PromocaoGerada) {
@@ -212,19 +130,22 @@ func sortearPromocao() PromocaoGerada {
 	}
 }
 
-func rodarLoopDePromocoes(gerenciador *GerenciadorInteresse) {
+func rodarLoopDePromocoes() {
 	for {
 		prom := sortearPromocao()
 		log.Printf("[PROMOÇÃO-GERADA] Categoria %s | Produto: %s | Desconto: %d%%", prom.Categoria, prom.Produto, prom.Desconto)
 
-		// Notifica os e-mails cadastrados na categoria sorteada
-		emailsInteressados := gerenciador.ObterEmailsPorCategoria(prom.Categoria)
-		if len(emailsInteressados) > 0 {
+		// Busca no banco os e-mails que têm a categoria sorteada na lista deles
+		emailsInteressados, err := service.ObterEmailsPorCategoria(prom.Categoria)
+		switch {
+		case err != nil:
+			log.Printf("[ERRO-PROMOCOES] Falha ao consultar interessados da categoria %s: %v", prom.Categoria, err)
+		case len(emailsInteressados) > 0:
 			log.Printf("[INFO-PROMOCOES] Encontrados %d clientes interessados na categoria %s", len(emailsInteressados), prom.Categoria)
 			for _, email := range emailsInteressados {
 				go enviarEmailPromocao(email, prom)
 			}
-		} else {
+		default:
 			log.Printf("[INFO-PROMOCOES] Nenhum cliente cadastrado para a categoria %s no momento.", prom.Categoria)
 		}
 
@@ -236,7 +157,6 @@ func rodarLoopDePromocoes(gerenciador *GerenciadorInteresse) {
 func consumirMensagensPromocao(
 	msgs <-chan amqp.Delivery,
 	chavesPublicas map[string]ed25519.PublicKey,
-	gerenciador *GerenciadorInteresse,
 ) {
 	for d := range msgs {
 		payload, err := seguranca.AbrirPacote(d.Body, chavesPublicas)
@@ -253,9 +173,14 @@ func consumirMensagensPromocao(
 
 		switch ev.Acao {
 		case "CADASTRAR":
-			gerenciador.Cadastrar(ev.Email, ev.Categorias)
+			// Substitui a lista de categorias do e-mail (lista vazia = cadastrado sem categorias)
+			if err := service.CadastrarInteresse(ev.Email, ev.Categorias); err != nil {
+				log.Printf("[ERRO-PROMOCOES] Falha ao cadastrar interesse de %s: %v", ev.Email, err)
+			}
 		case "CANCELAR":
-			gerenciador.Remover(ev.Email)
+			if err := service.RemoverInteresse(ev.Email); err != nil {
+				log.Printf("[ERRO-PROMOCOES] Falha ao cancelar interesse de %s: %v", ev.Email, err)
+			}
 		default:
 			log.Printf("[ERRO-PROMOCOES] Ação desconhecida %q para %s", ev.Acao, ev.Email)
 		}
@@ -271,7 +196,9 @@ func main() {
 		log.Println("[AVISO-PROMOCOES] RESEND_API_KEY vazia: os envios de e-mail vão falhar")
 	}
 
-	gerenciador := NovoGerenciadorInteresse()
+	// Conecta já na subida: se o banco estiver fora, falha agora e não na 1ª mensagem
+	data.Pool("PROMOCOES")
+	defer data.FecharBancos()
 
 	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
 	failOnError(err, "Erro ao conectar ao RabbitMQ")
@@ -289,10 +216,10 @@ func main() {
 	failOnError(err, "Erro ao carregar chaves públicas")
 
 	// Consome o evento interesse.promocao
-	go consumirMensagensPromocao(msgs, chavesPublicas, gerenciador)
+	go consumirMensagensPromocao(msgs, chavesPublicas)
 
 	// Gera promoções periodicamente e dispara os e-mails
-	go rodarLoopDePromocoes(gerenciador)
+	go rodarLoopDePromocoes()
 
 	log.Printf("[INFO-MS-PROMOCOES] MS Promoções rodando e ouvindo RabbitMQ...")
 
