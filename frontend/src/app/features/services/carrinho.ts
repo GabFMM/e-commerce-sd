@@ -20,6 +20,10 @@ export class CarrinhoService {
     return this.produtos();
   }
 
+  public getQuantidadeDisponivelProduto(produtoId: number) {
+    return this.produtos().find(produto => produto.id === produtoId)!.quantidadeDisponivel;
+  }
+
   public getProdutosProntos(): ProdutoPronto[] {
     return this.produtosProntos;
   }

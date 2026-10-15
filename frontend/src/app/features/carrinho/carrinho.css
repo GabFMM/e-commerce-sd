@@ -152,7 +152,7 @@ main > p a:focus-visible {
     max-width: 120px;
     padding: 10px;
 
-    border: 1px solid var(--color-surface-muted);
+    border: 2px solid var(--color-surface-muted);
     border-radius: 8px;
 
     background-color: var(--color-surface-light);

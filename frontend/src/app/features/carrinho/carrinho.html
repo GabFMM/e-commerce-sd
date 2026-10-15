@@ -20,6 +20,7 @@
 
                         <input
                             type="number"
+                            [style]="!this.ehQuantidadeDesejadaValida(produto.id) ? 'border-color: red' : ''"
                             [id]="'quantidade-' + produto.id"
                             [name]="'quantidade-' + produto.id"
                             [(ngModel)]="quantidadesDesejadas[produto.id]"
