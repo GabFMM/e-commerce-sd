@@ -121,7 +121,7 @@ export class PedidosService {
         return;
       }
 
-      this.eventSource = new EventSource(`${this.apiUrl}/eventos`);
+      this.eventSource = new EventSource(`http://localhost:8080/api/eventos`);
 
       this.eventSource.addEventListener(
         'atualizar-pedido',

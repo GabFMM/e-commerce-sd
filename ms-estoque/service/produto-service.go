@@ -22,7 +22,7 @@ func ObterProdutosFiltros(
 		SELECT
 			id,
 			nome,
-			quantidade,
+			categoria,
 			(quantidade - reservados) AS disponivel
 		FROM produtos
 		WHERE (quantidade - reservados) > 0
@@ -61,8 +61,8 @@ func ObterProdutosFiltros(
 		if err := rows.Scan(
 			&p.Id,
 			&p.Nome,
-			&p.Quantidade,
-			&p.Disponivel,
+			&p.Categoria,
+			&p.QuantidadeDisponivel,
 		); err != nil {
 			return nil, err
 		}
