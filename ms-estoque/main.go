@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"strconv"
 	"time"
 
 	"net/http"
@@ -43,12 +44,38 @@ func montarRouterEstoque() *gin.Engine {
 
 	// GET /produtos -> produtos com saldo disponível (consumido pelo MS Principal)
 	r.GET("/produtos", func(c *gin.Context) {
-		produtos, err := service.ListarProdutosDisponiveis()
+		nomeLike, nomeLikePresente := c.GetQuery("nome_like")
+		idsQuery := c.QueryArray("id")
+
+		ids := make([]int, 0, len(idsQuery))
+
+		for _, idQuery := range idsQuery {
+			id, err := strconv.Atoi(idQuery)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"erro": "id inválido: " + idQuery,
+				})
+				return
+			}
+
+			ids = append(ids, id)
+		}
+
+		produtos, err := service.ObterProdutosFiltros(
+			nomeLike,
+			nomeLikePresente,
+			ids,
+			len(idsQuery) > 0,
+		)
+		
 		if err != nil {
 			log.Printf("[ERRO-MS-ESTOQUE] Falha ao consultar produtos: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível consultar os produtos"})
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"erro": "não foi possível consultar os produtos",
+			})
 			return
 		}
+
 		c.JSON(http.StatusOK, produtos)
 	})
 

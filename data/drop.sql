@@ -1,3 +1,0 @@
-DROP TABLE IF EXISTS pedidos_produtos;
-DROP TABLE IF EXISTS pedidos;
-DROP TABLE IF EXISTS produtos;

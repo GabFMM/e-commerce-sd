@@ -4,26 +4,12 @@ import (
 	"e-commerce-sd/seguranca"
 	"e-commerce-sd/setup"
 	"log"
-	"os"
 )
 
 func main() {
-	args := os.Args
-
-	if len(os.Args) < 2 {
-		log.Panic("[ERRO] Esperava 1 argumento na linha de comando, mas obteve 0")
-	}
-
-	switch args[1] {
-	case "iniciar":
-		setup.ConfigurarFilas()
-		seguranca.GerarChaves()
-		//data.IniciarBanco()
-	//case "encerrar":
-	//data.EncerrarBanco()
-	default:
-		log.Panic("[ERRO] Argumento na linha de comando é inválido")
-	}
+	setup.ConfigurarFilas()
+	
+	seguranca.GerarChaves()
 
 	log.Println("[LOG] Setup concluído com sucesso.")
 }
