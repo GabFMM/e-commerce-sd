@@ -238,7 +238,17 @@ func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin
 			}
 
 			// Só publica depois do commit do pedido
-			err = publicar(publishCh, chavePrivada, "pedido.criado", dto.PedidoDTO{Id: id})
+			itensDTO := make([]dto.ItemDTO, 0, len(req.Itens))
+			for _, item := range req.Itens {
+				itensDTO = append(itensDTO, dto.ItemDTO{
+					ProdutoId:  item.ProdutoID,
+					Quantidade: item.Quantidade,
+				})
+			}
+
+			pedido := dto.PedidoCriadoDTO{Id: id, Itens: itensDTO}
+
+			err = publicar(publishCh, chavePrivada, "pedido.criado", pedido)
 			printOnError(err, "[ERRO-MS-PRINCIPAL] Pedido criado, mas falhou ao publicar pedido.criado")
 
 			c.JSON(http.StatusCreated, gin.H{"id": id, "situacao": "CRIADO"})
