@@ -1,0 +1,49 @@
+header {
+  position: sticky;
+  top: 0;
+
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+
+  padding: 1rem 2rem;
+  background-color: var(--color-primary);
+}
+
+.logotipo {
+  width: 50px;
+  height: 50px;
+  flex-shrink: 0;
+
+  background-color: var(--color-accent);
+  border-radius: 10px;
+}
+
+/* Navegação */
+nav ul {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+nav a {
+  color: var(--color-text-light);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+nav a:hover {
+  color: #60A5FA;
+}
+
+/* Acessibilidade: navegação pelo teclado */
+nav a:focus-visible {
+  outline: 2px solid #60A5FA;
+  outline-offset: 4px;
+  border-radius: 2px;
+}

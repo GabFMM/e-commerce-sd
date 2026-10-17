@@ -1,0 +1,499 @@
+main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5vh;
+
+    width: 100%;
+    margin: 5vh 0;
+    padding: 0 20px;
+    box-sizing: border-box;
+}
+
+/* Estado vazio */
+main > h1 {
+    margin: 0;
+    color: var(--color-primary);
+    font-size: clamp(1.4rem, 3vw, 2rem);
+    text-align: center;
+}
+
+main > p {
+    margin: 0;
+    color: var(--color-text-dark);
+    text-align: center;
+    line-height: 1.6;
+}
+
+main > p a {
+    color: var(--color-accent);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+main > p a:hover {
+    text-decoration: underline;
+}
+
+main > p a:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+}
+
+/* Lista de pedidos */
+.pedidos {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+
+    width: 100%;
+    max-width: 800px;
+}
+
+/* Cartão do pedido */
+.pedido {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+
+    width: 100%;
+    padding: 20px;
+
+    background-color: var(--color-primary);
+    color: var(--color-text-light);
+
+    border-radius: 12px;
+    box-sizing: border-box;
+    box-shadow: 0 4px 12px rgb(20 43 74 / 12%);
+
+    transition: box-shadow 0.2s ease;
+}
+
+.pedido:hover {
+    box-shadow: 0 6px 18px rgb(20 43 74 / 22%);
+}
+
+/* Identificação e situação */
+.pedido-informacoes {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+
+    min-width: 0;
+}
+
+.pedido-id {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.pedido-situacao {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+
+    font-size: 0.9rem;
+}
+
+/* Base compartilhada por todas as situações */
+.situacao-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 5px 10px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+/* Pedido criado */
+.situacao-criado {
+    background-color: #E2E8F0;
+    color: #334155;
+    border-color: #CBD5E1;
+}
+
+/* Estoque disponível */
+.situacao-estoque_disponivel {
+    background-color: #DBEAFE;
+    color: #1E40AF;
+    border-color: #BFDBFE;
+}
+
+/* Estoque indisponível */
+.situacao-estoque_indisponivel {
+    background-color: #FEE2E2;
+    color: #991B1B;
+    border-color: #FECACA;
+}
+
+/* Pagamento aprovado */
+.situacao-pagamento_aprovado {
+    background-color: #CCFBF1;
+    color: #115E59;
+    border-color: #99F6E4;
+}
+
+/* Pagamento recusado */
+.situacao-pagamento_recusado {
+    background-color: #FEE2E2;
+    color: #991B1B;
+    border-color: #FECACA;
+}
+
+/* Pedido enviado */
+.situacao-enviado {
+    background-color: #DCFCE7;
+    color: #166534;
+    border-color: #BBF7D0;
+}
+
+/* Ações do pedido */
+.pedido-acoes {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+/* Botão Ver produtos */
+.pedido-acoes .ver-produtos {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-height: 42px;
+    padding: 10px 16px;
+
+    border: 1px solid transparent;
+    border-radius: 8px;
+
+    background-color: var(--color-accent);
+    color: var(--color-surface-light);
+
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+
+    transition:
+        background-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.pedido-acoes .ver-produtos:hover {
+    background-color: #1D4ED8;
+}
+
+.pedido-acoes .ver-produtos:active {
+    transform: scale(0.97);
+}
+
+.pedido-acoes .ver-produtos:focus-visible,
+.pedido-acoes .remover-pedido:focus-visible {
+    outline: 2px solid var(--color-text-light);
+    outline-offset: 3px;
+}
+
+/* Botão de remover pedido */
+.pedido-acoes .remover-pedido {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    width: 42px;
+    height: 42px;
+    padding: 9px;
+
+    border: 1px solid rgb(255 255 255 / 20%);
+    border-radius: 8px;
+
+    background-color: rgb(255 255 255 / 8%);
+    cursor: pointer;
+
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.pedido-acoes .remover-pedido img {
+    display: block;
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+}
+
+.pedido-acoes .remover-pedido:hover {
+    background-color: var(--color-danger);
+    border-color: var(--color-danger);
+}
+
+.pedido-acoes .remover-pedido:active {
+    transform: scale(0.92);
+}
+
+/* Sobreposição do diálogo */
+.dialog-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 20px;
+    background-color: rgb(0 0 0 / 55%);
+    box-sizing: border-box;
+
+    animation: aparecer-overlay 0.2s ease;
+}
+
+/* Janela do diálogo */
+.dialog {
+    display: flex;
+    flex-direction: column;
+
+    width: 100%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+
+    padding: 24px;
+    border-radius: 12px;
+
+    background-color: var(--color-surface-light);
+    color: var(--color-text-dark);
+
+    box-shadow: 0 10px 30px rgb(0 0 0 / 25%);
+    box-sizing: border-box;
+
+    animation: aparecer-dialog 0.2s ease;
+}
+
+/* Cabeçalho do diálogo */
+.dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+
+    padding-bottom: 16px;
+    border-bottom: 1px solid #E2E8F0;
+}
+
+.dialog-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+/* Botão X */
+.dialog-header .botao-fechar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    width: 38px;
+    height: 38px;
+    padding: 0;
+
+    border: none;
+    border-radius: 8px;
+
+    background-color: transparent;
+    color: var(--color-text-dark);
+
+    font-size: 1.8rem;
+    line-height: 1;
+    cursor: pointer;
+
+    transition:
+        background-color 0.2s ease,
+        color 0.2s ease;
+}
+
+.dialog-header .botao-fechar:hover {
+    background-color: #F1F5F9;
+    color: var(--color-danger);
+}
+
+.dialog-header .botao-fechar:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+/* Conteúdo do diálogo */
+.dialog-conteudo {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    overflow: auto;
+    padding: 16px 0;
+}
+
+/* Cartões dos produtos no diálogo */
+.dialog-conteudo .produto {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+
+    padding: 16px;
+
+    background-color: var(--color-primary);
+    color: var(--color-text-light);
+
+    border: 1px solid rgb(20 43 74 / 10%);
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
+.dialog-conteudo .produto p {
+    margin: 0;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.dialog-conteudo .produto .produto-nome {
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+
+.dialog-conteudo .produto p:not(.produto-nome) {
+    font-size: 0.9rem;
+}
+
+/* Rodapé do diálogo */
+.dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+
+    padding-top: 16px;
+    border-top: 1px solid #E2E8F0;
+}
+
+.dialog-footer button {
+    min-height: 42px;
+    padding: 10px 24px;
+
+    border: none;
+    border-radius: 8px;
+
+    background-color: var(--color-accent);
+    color: var(--color-surface-light);
+
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+
+    transition:
+        background-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.dialog-footer button:hover {
+    background-color: var(--color-primary);
+}
+
+.dialog-footer button:active {
+    transform: scale(0.97);
+}
+
+.dialog-footer button:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+}
+
+/* Animações */
+@keyframes aparecer-overlay {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes aparecer-dialog {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Responsividade */
+@media (max-width: 600px) {
+    main {
+        margin: 24px 0;
+        padding: 0 12px;
+        gap: 20px;
+    }
+
+    .pedido {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+        padding: 16px;
+    }
+
+    .pedido-informacoes {
+        gap: 10px;
+    }
+
+    .pedido-acoes {
+        width: 100%;
+    }
+
+    .pedido-acoes .ver-produtos {
+        flex: 1;
+    }
+
+    .dialog-overlay {
+        padding: 12px;
+    }
+
+    .dialog {
+        max-height: 85vh;
+        padding: 18px;
+    }
+
+    .dialog-header h2 {
+        font-size: 1.1rem;
+    }
+}
+
+/* Acessibilidade: reduzir movimento */
+@media (prefers-reduced-motion: reduce) {
+    .pedido,
+    .pedido-acoes button,
+    .dialog-header .botao-fechar,
+    .dialog-footer button {
+        transition: none;
+    }
+
+    .dialog-overlay,
+    .dialog {
+        animation: none;
+    }
+}

@@ -13,12 +13,12 @@ import (
 )
 
 type Pedido struct {
-	Id       int
-	Situacao string
+	Id       int          `json:"id"`
+	Situacao string       `json:"situacao"`
 
-	// Chave corresponde ao nome do produto
+	// Chave corresponde ao ID do produto
 	// Valor corresponde a quantidade requisitada
-	Produtos map[string]int
+	Produtos map[int]int  `json:"produtos"`
 }
 
 func AtualizarSituacaoPedido(pedidoDTO dto.PedidoDTO, novaSituacao string) {
@@ -56,7 +56,7 @@ func ObterPedidos() []Pedido {
         SELECT 
             pedidos.id,
             pedidos.situacao,
-            produtos.nome,
+			pedidos_produtos.produto_id,
             pedidos_produtos.quantidade
         FROM pedidos
         INNER JOIN pedidos_produtos
@@ -81,14 +81,14 @@ func ObterPedidos() []Pedido {
 		var (
 			id          int
 			situacao    string
-			nomeProduto string
+			produto_id  int
 			quantidade  int
 		)
 
 		if err := rows.Scan(
 			&id,
 			&situacao,
-			&nomeProduto,
+			&produto_id,
 			&quantidade,
 		); err != nil {
 			log.Printf(
@@ -104,13 +104,13 @@ func ObterPedidos() []Pedido {
 			pedido = &Pedido{
 				Id:       id,
 				Situacao: situacao,
-				Produtos: make(map[string]int),
+				Produtos: make(map[int]int),
 			}
 
 			pedidosMap[id] = pedido
 		}
 
-		pedido.Produtos[nomeProduto] = quantidade
+		pedido.Produtos[produto_id] = quantidade
 	}
 
 	if err := rows.Err(); err != nil {

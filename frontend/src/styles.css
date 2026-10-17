@@ -1,0 +1,31 @@
+/* You can add global styles to this file, and also import other style files */
+
+:root {
+  /* Identidade visual */
+  --color-primary: #142B4A;
+  --color-accent: #2563EB;
+
+  /* Superfícies */
+  --color-surface-light: #FFFFFF;
+  --color-surface-muted: #64748B;
+
+  /* Textos */
+  --color-text-light: #E2E8F0;
+  --color-text-dark: #1E293B;
+  --color-text-muted: #64748B;
+
+  /* Estados */
+  --color-success: #16A34A;
+  --color-warning: #D97706;
+  --color-danger: #DC2626;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-surface-light);
+  font-family: Inter, Arial, sans-serif;
+}
+
+img {
+  object-fit: contain;
+}

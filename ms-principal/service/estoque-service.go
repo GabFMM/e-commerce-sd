@@ -26,8 +26,16 @@ var estoqueClient = &http.Client{Timeout: 5 * time.Second}
 
 // ObterProdutosDoEstoque consulta GET /produtos no MS Estoque (via REST) e devolve o JSON
 // como veio. O gateway só repassa a lista, então não depende da estrutura dos produtos.
-func ObterProdutosDoEstoque() (json.RawMessage, error) {
-	resp, err := estoqueClient.Get(estoqueURL + "/produtos")
+func ObterProdutosDoEstoque(query string) (json.RawMessage, error) {
+
+	// Constrói o endpoint com os parâmetros recebidos
+	endpoint := estoqueURL + "/produtos"
+	if query != "" {
+		endpoint += "?" + query
+	}
+
+	// Realiza a requisição
+	resp, err := estoqueClient.Get(endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrEstoqueIndisponivel, err)
 	}

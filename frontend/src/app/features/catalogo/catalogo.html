@@ -1,0 +1,55 @@
+<main>
+    <div class="barra-pesquisa">
+        <input
+            type="text"
+            [(ngModel)]="nomeProduto"
+            placeholder="Pesquise por produtos..."
+            (keyup.enter)="pesquisarProdutos()">
+
+        <img
+            class="lupa"
+            src="/lupa.png"
+            alt="lupa"
+            (click)="pesquisarProdutos()">
+    </div>
+
+    <div class="produtos">
+        @for (produto of produtos(); track produto.id) {
+            <div class="produto">
+                <img src="/imagem.png" [alt]="produto.nome">
+
+                <p><strong>{{ produto.nome.toUpperCase() }}</strong></p>
+                <p>Categoria: {{ produto.categoria }}</p>
+                <p>Quantidade disponível: {{ produto.quantidadeDisponivel }}</p>
+
+                @if(!produto.quantidadeDisponivel) {
+                    <span title="Produto indisponível">
+                        <button
+                            type="button"
+                            [disabled]="true"
+                            (click)="AdicionarProdutoCarrinho(produto)">
+                            Adicionar no carrinho
+                        </button>
+                    </span>
+                }
+                @else if(this.carrinhoSerice.produtoEstaNoCarrinho(produto)) {
+                    <span title="Produto Já adicionado no carrinho">
+                        <button
+                            type="button"
+                            [disabled]="true"
+                            (click)="AdicionarProdutoCarrinho(produto)">
+                            Adicionar no carrinho
+                        </button>
+                    </span>
+                }
+                @else {
+                    <button
+                        type="button"
+                        (click)="AdicionarProdutoCarrinho(produto)">
+                        Adicionar no carrinho
+                    </button>
+                }
+            </div>
+        }
+    </div>
+</main>
