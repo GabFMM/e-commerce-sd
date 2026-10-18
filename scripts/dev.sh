@@ -87,6 +87,8 @@ start_service "ms-estoque" go run ./ms-estoque
 start_service "ms-pagamento" go run ./ms-pagamento
 start_service "ms-entrega" go run ./ms-entrega
 start_service "ms-promocoes" go run ./ms-promocoes
+echo "Iniciando mock-pagamento..."
+go run ./ms-pagamento/mock &
 
 start_service "frontend" bash -c \
     'cd frontend && exec npx ng serve'

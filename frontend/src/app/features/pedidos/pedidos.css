@@ -204,6 +204,44 @@ main > p a:focus-visible {
     outline-offset: 3px;
 }
 
+/* Botão Pagar (link para o checkout) */
+.pedido-acoes .pagar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-height: 42px;
+    padding: 10px 16px;
+
+    border: 1px solid transparent;
+    border-radius: 8px;
+
+    background-color: #2E7D32;
+    color: #fff;
+
+    font: inherit;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+
+    transition:
+        background-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.pedido-acoes .pagar:hover {
+    background-color: #1B5E20;
+}
+
+.pedido-acoes .pagar:active {
+    transform: scale(0.97);
+}
+
+.pedido-acoes .pagar:focus-visible {
+    outline: 2px solid var(--color-text-light);
+    outline-offset: 3px;
+}
+
 /* Botão de remover pedido */
 .pedido-acoes .remover-pedido {
     display: inline-flex;
@@ -465,7 +503,8 @@ main > p a:focus-visible {
         width: 100%;
     }
 
-    .pedido-acoes .ver-produtos {
+    .pedido-acoes .ver-produtos,
+    .pedido-acoes .pagar {
         flex: 1;
     }
 
@@ -487,6 +526,7 @@ main > p a:focus-visible {
 @media (prefers-reduced-motion: reduce) {
     .pedido,
     .pedido-acoes button,
+    .pedido-acoes .pagar,
     .dialog-header .botao-fechar,
     .dialog-footer button {
         transition: none;
