@@ -4,7 +4,7 @@
 setup: docker setup-rabbitmq
 
 docker:
-	docker compose -f docker/docker-compose.yml up -d
+	docker compose --env-file .env -f docker/docker-compose.yml up -d
 
 setup-rabbitmq:
 	go run ./setup/main
