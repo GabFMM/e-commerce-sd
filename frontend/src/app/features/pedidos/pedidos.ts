@@ -1,4 +1,4 @@
-import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { PedidosService } from '../services/pedidos';
 import { RouterLink } from '@angular/router';
 import { ProdutoDTO, ProdutosService } from '../services/produtos';
@@ -9,7 +9,7 @@ import { ProdutoDTO, ProdutosService } from '../services/produtos';
   styleUrl: './pedidos.css',
   templateUrl: './pedidos.html',
 })
-export class Pedidos implements OnInit, OnDestroy {
+export class Pedidos {
   protected produtosService = inject(ProdutosService);
   protected pedidosService = inject(PedidosService);
 
@@ -17,13 +17,8 @@ export class Pedidos implements OnInit, OnDestroy {
   protected pedidoId: number | null = null;
   protected produtosPedido = signal<ProdutoDTO[]>([]);
 
-  ngOnInit(): void {
-    this.pedidosService.conectarSSE();
-  }
-
-  ngOnDestroy(): void {
-    this.pedidosService.desconectarSSE();
-  }
+  // A conexão SSE agora é aberta uma única vez no App (app.ts),
+  // por isso este componente não conecta nem desconecta mais.
 
   protected mostrarProdutosPedido(pedidoId: number): void {
     this.pedidoId = pedidoId;
