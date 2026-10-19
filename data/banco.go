@@ -19,11 +19,9 @@ var (
 )
 
 func carregarEnv() bool {
-    if err := godotenv.Load("docker/.env"); err != nil {
-        if errRoot := godotenv.Load(".env"); errRoot != nil {
-            log.Println("[AVISO] Arquivo .env não encontrado; usando variáveis do sistema")
-        }
-    }
+	if errRoot := godotenv.Load(".env"); errRoot != nil {
+		log.Println("[AVISO] Arquivo .env não encontrado; usando variáveis do sistema")
+	}
     return true
 }
 

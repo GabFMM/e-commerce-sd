@@ -1,4 +1,4 @@
-CREATE TABLE produtos (
+CREATE TABLE IF NOT EXISTS produtos (
     id serial PRIMARY KEY,
     nome VARCHAR(50) UNIQUE NOT NULL,
     categoria CHAR(1) NOT NULL CHECK (categoria IN ('A', 'B', 'C')),

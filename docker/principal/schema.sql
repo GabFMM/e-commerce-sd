@@ -1,15 +1,15 @@
-CREATE TABLE produtos (
+CREATE TABLE IF NOT EXISTS produtos (
     id serial PRIMARY KEY,
     nome VARCHAR(50) UNIQUE NOT NULL,
     categoria CHAR(1) NOT NULL CHECK (categoria IN ('A', 'B', 'C'))
 );
 
-CREATE TABLE pedidos (
+CREATE TABLE IF NOT EXISTS pedidos (
     id serial PRIMARY KEY,
     situacao VARCHAR(20) NOT NULL CHECK (situacao IN ('CRIADO', 'ESTOQUE_DISPONIVEL', 'ESTOQUE_INDISPONIVEL', 'PAGAMENTO_APROVADO', 'PAGAMENTO_RECUSADO', 'ENVIADO'))
 );
 
-CREATE TABLE pedidos_produtos (
+CREATE TABLE IF NOT EXISTS pedidos_produtos (
     pedido_id integer NOT NULL,
     produto_id integer NOT NULL,
     quantidade integer NOT NULL CHECK (quantidade > 0),

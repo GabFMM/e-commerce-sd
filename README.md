@@ -4,7 +4,7 @@
 
 ### 1. Configurar as variáveis de ambiente
 
-Configure o arquivo `docker/.env.example` conforme necessário e salve suas configurações em `docker/.env`.
+Configure o arquivo `.env.example` conforme necessário e renomeie-o para `.env`.
 
 ### 2. Executar o projeto completo
 

@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { Catalogo } from './features/catalogo/catalogo';
 import { Carrinho } from './features/carrinho/carrinho';
 import { Pedidos } from './features/pedidos/pedidos';
+import { Notificacoes } from './features/notificacoes/notificacoes';
 
 export const routes: Routes = [
   {
@@ -15,6 +16,10 @@ export const routes: Routes = [
   {
     path: 'pedidos',
     component: Pedidos
+  },
+  {
+    path: 'notificacoes',
+    component: Notificacoes
   },
   {
     path: '**',

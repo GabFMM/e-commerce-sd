@@ -22,15 +22,48 @@ cleanup() {
         wait "$pid" 2>/dev/null || true
     done
 
+    echo "Limpando as tabelas dos bancos..."
+    for service in db-principal db-estoque db-promocoes; do
+        if ! docker compose --env-file .env -f docker/docker-compose.yml exec -T "$service" \
+            sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+            < docker/drop.sql; then
+            echo "Não foi possível executar docker/drop.sql em $service." >&2
+        fi
+    done
+
     echo "Serviços encerrados."
 }
 
 trap cleanup EXIT
-trap 'exit 130' INT
+trap 'exit 0' INT
 trap 'exit 143' TERM
 
 echo "Iniciando Docker..."
-docker compose -f docker/docker-compose.yml up -d
+docker compose --env-file .env -f docker/docker-compose.yml up -d
+
+initialize_database() {
+    local service="$1"
+    local schema="$2"
+    local seed="${3:-}"
+
+    echo "Aguardando e preparando $service..."
+    until docker compose --env-file .env -f docker/docker-compose.yml exec -T "$service" \
+        sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null 2>&1; do
+        sleep 1
+    done
+
+    docker compose --env-file .env -f docker/docker-compose.yml exec -T "$service" \
+        sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$schema"
+
+    if [[ -n "$seed" ]]; then
+        docker compose --env-file .env -f docker/docker-compose.yml exec -T "$service" \
+            sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$seed"
+    fi
+}
+
+initialize_database db-principal docker/principal/schema.sql docker/principal/seed.sql
+initialize_database db-estoque docker/estoque/schema.sql docker/estoque/seed.sql
+initialize_database db-promocoes docker/promocoes/schema.sql
 
 echo "Configurando filas no RabbitMQ e criando chaves..."
 go run ./setup/main

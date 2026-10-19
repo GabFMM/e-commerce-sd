@@ -6,4 +6,5 @@ INSERT INTO produtos (nome, categoria) VALUES
     ('Webcam', 'C'),
     ('Headset', 'C'),
     ('Impressora', 'A'),
-    ('Cabo HDMI', 'B');
+    ('Cabo HDMI', 'B')
+ON CONFLICT (nome) DO NOTHING;

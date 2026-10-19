@@ -1,0 +1,42 @@
+<main>
+    <section class="notificacoes">
+        <h1>Gerenciar interesses nas promoções</h1>
+        <p class="descricao">Escolha as categorias sobre as quais deseja receber ou parar de receber promoções.</p>
+
+        <div class="categorias" aria-label="Categorias de interesse">
+            <label class="categoria">
+                <input type="checkbox" [(ngModel)]="categoriaA" (ngModelChange)="this.interessesAtualizados.set(false)">
+                <span>Categoria A</span>
+            </label>
+
+            <label class="categoria">
+                <input type="checkbox" [(ngModel)]="categoriaB" (ngModelChange)="this.interessesAtualizados.set(false)">
+                <span>Categoria B</span>
+            </label>
+
+            <label class="categoria">
+                <input type="checkbox" [(ngModel)]="categoriaC" (ngModelChange)="this.interessesAtualizados.set(false)">
+                <span>Categoria C</span>
+            </label>
+        </div>
+
+        @if(haPeloMenosUmaCategoriaSelecionada()) {
+            <form class="formulario-email">
+                <label for="email">Informe seu email para atualizar seus interesses</label>
+                <input 
+                    id="email" 
+                    name="email"
+                    type="email" 
+                    autocomplete="email" 
+                    placeholder="voce@exemplo.com"
+                    [(ngModel)]="email"
+                    (ngModelChange)="this.interessesAtualizados.set(false)">
+                <button type="button" (click)="atualizarInteresses()">Enviar</button>
+            </form>
+        }
+
+        @if(this.interessesAtualizados()){
+            <h2 class="descricao">Interesses atualizados!</h2>
+        }
+    </section>
+</main>
