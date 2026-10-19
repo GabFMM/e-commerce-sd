@@ -1,0 +1,27 @@
+<main>
+    <section class="checkout">
+        <h1>Pagamento do pedido #{{ pedidoId }}</h1>
+
+        @switch (estado()) {
+            @case ('aguardando') {
+                <p class="descricao">Mock de pagamento: escolha o resultado.</p>
+                <div class="acoes">
+                    <button type="button" class="aprovar" (click)="responder('APROVADO')">Aprovar pagamento</button>
+                    <button type="button" class="recusar" (click)="responder('RECUSADO')">Recusar pagamento</button>
+                </div>
+            }
+            @case ('enviando') {
+                <p class="descricao">Enviando resposta...</p>
+            }
+            @case ('aprovado') {
+                <p class="descricao sucesso">Pagamento aprovado! Pode fechar esta aba.</p>
+            }
+            @case ('recusado') {
+                <p class="descricao erro">Pagamento recusado. Pode fechar esta aba.</p>
+            }
+            @case ('erro') {
+                <p class="descricao erro">{{ mensagemErro() }}</p>
+            }
+        }
+    </section>
+</main>

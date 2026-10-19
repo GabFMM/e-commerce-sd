@@ -3,6 +3,8 @@ import { Catalogo } from './features/catalogo/catalogo';
 import { Carrinho } from './features/carrinho/carrinho';
 import { Pedidos } from './features/pedidos/pedidos';
 import { Notificacoes } from './features/notificacoes/notificacoes';
+import { MockPagamento } from './features/mock-pagamento/mock-pagamento';
+ 
 
 export const routes: Routes = [
   {
@@ -20,6 +22,10 @@ export const routes: Routes = [
   {
     path: 'notificacoes',
     component: Notificacoes
+  },
+  {
+    path: 'mock-pagamento/:pedidoId',
+    component: MockPagamento
   },
   {
     path: '**',

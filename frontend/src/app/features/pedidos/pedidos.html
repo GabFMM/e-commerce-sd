@@ -21,6 +21,16 @@
                     </div>
 
                     <div class="pedido-acoes">
+                        @if (pedido.situacao === 'ESTOQUE_DISPONIVEL') {
+                            <a
+                                class="pagar"
+                                [routerLink]="['/mock-pagamento', pedido.id]" 
+                                target="_blank">
+                                
+                                Pagar
+                            </a>
+                        }
+
                         <button
                             type="button"
                             class="ver-produtos"

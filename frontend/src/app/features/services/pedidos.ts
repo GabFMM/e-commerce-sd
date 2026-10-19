@@ -1,8 +1,9 @@
 import { HttpClient } from '@angular/common/http';
-import { inject, OnInit, Service, signal } from '@angular/core';
+import { inject, Service, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ProdutoDTO, ProdutosService } from './produtos';
 import { ProdutoPronto } from './carrinho';
+import { ToastService, TipoToast } from './toast';
 
 export interface PedidoResponse {
   id: number;
@@ -12,19 +13,33 @@ export interface PedidoResponse {
 }
 
 export interface CriarPedidoRequest {
-  // Relaciona cada produto.id com sua quantidade desejada
   itens: Item[];
 }
 
 interface Item {
-  produto_id: number,
-  quantidade: number,
+  produto_id: number;
+  quantidade: number;
 }
 
-export interface AtualizarPedidoResponse {
-  id: number;
+// Formato enviado pelo backend (PayloadEvento no main.go)
+export interface EventoPedido {
+  tipo: string;
+  pedido_id: number;
   situacao: string;
+  url_checkout?: string;
 }
+
+const CONFIG_EVENTOS: Record<
+  string,
+  { tipo: TipoToast; titulo: string; texto: (id: number) => string }
+> = {
+  'pedido.estoque_ok':    { tipo: 'info',    titulo: 'Estoque confirmado',   texto: id => `Pedido #${id}: produtos reservados.` },
+  'estoque.indisponivel': { tipo: 'erro',    titulo: 'Estoque indisponível', texto: id => `Pedido #${id} cancelado por falta de estoque.` },
+  'pagamento.criado':     { tipo: 'aviso',   titulo: 'Aguardando pagamento', texto: id => `Pedido #${id}: finalize o pagamento.` },
+  'pagamento.aprovado':   { tipo: 'sucesso', titulo: 'Pagamento aprovado',   texto: id => `Pedido #${id} foi pago.` },
+  'pagamento.recusado':   { tipo: 'erro',    titulo: 'Pagamento recusado',   texto: id => `Pedido #${id} teve o pagamento recusado.` },
+  'pedido.enviado':       { tipo: 'sucesso', titulo: 'Pedido enviado',       texto: id => `Pedido #${id} saiu para entrega.` },
+};
 
 @Service()
 export class PedidosService {
@@ -32,6 +47,7 @@ export class PedidosService {
   private apiUrl = 'http://localhost:8080/api/pedidos';
 
   protected produtosService = inject(ProdutosService);
+  private toastService = inject(ToastService);
 
   private pedidos = signal<PedidoResponse[]>([]);
 
@@ -69,7 +85,7 @@ export class PedidosService {
         })
     );
 
-    const pedido: CriarPedidoRequest = {itens};
+    const pedido: CriarPedidoRequest = { itens };
 
     return this.http.post<void>(
       `${this.apiUrl}`,
@@ -94,8 +110,8 @@ export class PedidosService {
   public obterQuantidadeRequisitada(pedidoId: number, produtoId: number): number {
     const produtos = this.pedidos().find(pedido => pedido.id === pedidoId)!.produtos;
 
-    for(const [id, quantidade] of Object.entries(produtos)) {
-      if(Number(id) === produtoId) {
+    for (const [id, quantidade] of Object.entries(produtos)) {
+      if (Number(id) === produtoId) {
         return quantidade;
       }
     }
@@ -116,39 +132,58 @@ export class PedidosService {
   }
 
   public conectarSSE(): void {
-      // Evita criar conexões duplicadas.
-      if (this.eventSource) {
-        return;
-      }
+    // Evita criar conexões duplicadas.
+    if (this.eventSource) {
+      return;
+    }
 
-      this.eventSource = new EventSource(`http://localhost:8080/api/eventos`);
+    this.eventSource = new EventSource('http://localhost:8080/api/eventos');
 
-      this.eventSource.addEventListener(
-        'atualizar-pedido',
-        (evento: MessageEvent) => {
-          const atualizacao: AtualizarPedidoResponse = JSON.parse(evento.data);
+    // Ao (re)conectar, sincroniza o estado: eventos enviados sem cliente conectado são perdidos
+    this.eventSource.onopen = () => {
+      this.recarregarPedidos();
+    };
 
-          this.pedidos.update(pedidos =>
-            pedidos.map(pedido =>
-              pedido.id === atualizacao.id
-                ? {
-                  ...pedido,
-                  situacao: atualizacao.situacao
-                }
-                : pedido
-            )
-          );
-        }
+    // O backend usa o nome de evento "message" (c.SSEvent("message", ev))
+    this.eventSource.addEventListener('message', (e: MessageEvent) => {
+      const ev: EventoPedido = JSON.parse(e.data);
+
+      // Atualiza a situação do pedido na lista
+      this.pedidos.update(pedidos =>
+        pedidos.map(p =>
+          p.id === ev.pedido_id ? { ...p, situacao: ev.situacao } : p
+        )
       );
 
-      this.eventSource.onerror = erro => {
-          console.error('Erro na conexão SSE:', erro);
-          // EventSource tenta reconectar automaticamente.
-      };
-    }
+      this.notificar(ev);
+    });
 
-    public desconectarSSE(): void {
-        this.eventSource?.close();
-        this.eventSource = undefined;
-    }
+    this.eventSource.onerror = erro => {
+      console.error('Erro na conexão SSE:', erro);
+      // EventSource tenta reconectar automaticamente.
+    };
+  }
+
+  public desconectarSSE(): void {
+    this.eventSource?.close();
+    this.eventSource = undefined;
+  }
+
+  private notificar(ev: EventoPedido): void {
+    const config = CONFIG_EVENTOS[ev.tipo];
+    if (!config) return;
+
+    this.toastService.exibir(
+      {
+        tipo: config.tipo,
+        titulo: config.titulo,
+        mensagem: config.texto(ev.pedido_id),
+        link: ev.url_checkout
+          ? { texto: 'Ir para o pagamento', url: ev.url_checkout }
+          : undefined,
+      },
+      // Toast com link de pagamento fica até o usuário fechar
+      ev.url_checkout ? null : 6000
+    );
+  }
 }
