@@ -1,3 +1,5 @@
-<app-header/>
+@if(!this.estaNoMockPagamentos()) {
+    <app-header/>
+}
 <app-toast-container />
 <router-outlet/>

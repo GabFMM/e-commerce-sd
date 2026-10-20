@@ -20,11 +20,11 @@
 
                         <input
                             type="number"
-                            [style]="!this.ehQuantidadeDesejadaValida(produto.id) ? 'border-color: red' : ''"
+                            [style]="!this.carrinhoService.ehQuantidadeDesejadaValida(produto.id, quantidadesDesejadas[produto.id]) ? 'border-color: red' : ''"
                             [id]="'quantidade-' + produto.id"
                             [name]="'quantidade-' + produto.id"
                             [(ngModel)]="quantidadesDesejadas[produto.id]"
-                            (ngModelChange)="this.adicionarProdutoPronto(produto.id)"
+                            (ngModelChange)="this.carrinhoService.atualizarProdutoPronto(produto.id, quantidadesDesejadas[produto.id])"
                             min="1"
                             [max]="produto.quantidadeDisponivel">
                     </div>

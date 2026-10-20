@@ -25,25 +25,6 @@ export class Carrinho implements OnInit {
     );
   }
 
-  protected ehQuantidadeDesejadaValida(produtoId: number): boolean {
-    const quantidadeDesejada = this.quantidadesDesejadas[produtoId];
-
-    if (quantidadeDesejada !== undefined) {
-      return quantidadeDesejada > 0 && quantidadeDesejada < this.carrinhoService.getQuantidadeDisponivelProduto(produtoId);
-    }
-
-    // Fallback: acho impossível de acontecer
-    return false;
-  }
-
-  protected adicionarProdutoPronto(produtoId: number): void {
-    const quantidadeDesejada = this.quantidadesDesejadas[produtoId];
-
-    if (quantidadeDesejada !== undefined) {
-      this.carrinhoService.adicionarProdutoPronto(produtoId, quantidadeDesejada);
-    }
-  }
-
   protected removerProduto(produtoId: number): void {
     delete this.quantidadesDesejadas[produtoId];
     this.carrinhoService.removerProduto(produtoId);

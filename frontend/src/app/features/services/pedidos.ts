@@ -182,8 +182,8 @@ export class PedidosService {
           ? { texto: 'Ir para o pagamento', url: ev.url_checkout }
           : undefined,
       },
-      // Toast com link de pagamento fica até o usuário fechar
-      ev.url_checkout ? null : 6000
+      // Toast com link de pagamento tem uma duração maior de tela
+      ev.url_checkout ? 10000 : 6000
     );
   }
 }

@@ -211,7 +211,7 @@ main > p a:focus-visible {
     justify-content: center;
 
     min-height: 42px;
-    padding: 10px 16px;
+    padding: 0px 16px;
 
     border: 1px solid transparent;
     border-radius: 8px;

@@ -44,19 +44,34 @@ export class CarrinhoService {
     this.produtos.update((p) => [...p, produto]);
   }
 
-  public adicionarProdutoPronto(produtoId: number, quantidadeDesejada: number): void {
-    // Se não existe o produto pronto, cria-se um novo
-    if(!this.produtosProntos.some(produtoPronto => produtoPronto.produtoId === produtoId)) {
-      this.produtosProntos.push({
-        produtoId: produtoId,
-        quantidade: quantidadeDesejada
-      });
+  public atualizarProdutoPronto(produtoId: number, quantidadeDesejada: number): void {
+    if(this.ehQuantidadeDesejadaValida(produtoId, quantidadeDesejada)) {
+      // Se não existe o produto pronto, cria-se um novo
+      if(!this.produtosProntos.some(produtoPronto => produtoPronto.produtoId === produtoId)) {
+        this.produtosProntos.push({
+          produtoId: produtoId,
+          quantidade: quantidadeDesejada
+        });
+      }
+      // Senão atualiza a quantidade para impedir dois produtos prontos com o mesmo ID
+      else {
+        const i = this.produtosProntos.findIndex(produtoPronto => produtoPronto.produtoId === produtoId);
+        this.produtosProntos[i].quantidade = quantidadeDesejada;
+      }
     }
-    // Senão atualiza a quantidade para impedir dois produtos prontos com o mesmo ID
+    // Por mais que nao seja uma quantidade desejada valida, 
+    // pode haver um produto pronto criado com uma quantidade anterior valida,
+    // logo é preciso remover o produto pronto 
+    // para impedir a criação de pedidos que não corresponde com os inputs do usuario
     else {
-      const i = this.produtosProntos.findIndex(produtoPronto => produtoPronto.produtoId === produtoId);
-      this.produtosProntos[i].quantidade = quantidadeDesejada;
+      this.produtosProntos = this.produtosProntos.filter(
+        produtoPronto => produtoPronto.produtoId !== produtoId
+      );
     }
+  }
+
+  public ehQuantidadeDesejadaValida(produtoId: number, quantidadeDesejada: number): boolean {
+    return quantidadeDesejada > 0 && quantidadeDesejada <= this.getQuantidadeDisponivelProduto(produtoId);
   }
 
   public removerProduto(produtoId: number): void {

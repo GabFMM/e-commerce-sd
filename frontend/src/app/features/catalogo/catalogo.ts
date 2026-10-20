@@ -2,6 +2,7 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { ProdutoDTO, ProdutosService } from '../services/produtos';
 import { CarrinhoService } from '../services/carrinho';
 import { FormsModule } from '@angular/forms';
+import { ToastService } from '../services/toast';
 
 @Component({
   imports: [FormsModule],
@@ -12,6 +13,7 @@ import { FormsModule } from '@angular/forms';
 export class Catalogo implements OnInit {
   protected carrinhoSerice = inject(CarrinhoService);
   protected produtosService = inject(ProdutosService);
+  protected toastService = inject(ToastService);
 
   protected produtos = signal<ProdutoDTO[]>([]);
   protected nomeProduto: string = "";
@@ -40,5 +42,11 @@ export class Catalogo implements OnInit {
 
   protected AdicionarProdutoCarrinho(produto: ProdutoDTO): void {
     this.carrinhoSerice.adicionarProduto(produto);
+    this.toastService.exibir({
+        tipo: 'info',
+        titulo: 'Informação',
+        mensagem: 'Produto adicionado no carrinho'
+      },
+      3000);
   }
 }
