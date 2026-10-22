@@ -204,8 +204,6 @@ func (s *servico) consumir(consumeCh *amqp.Channel, chavesPublicas map[string]ed
 	}
 }
 
-// ---------- Webhook HTTP ----------
-
 // POST /webhook/pagamento  {"pedido_id": 12, "status": "APROVADO"}
 func (s *servico) handleWebhook(c *gin.Context) {
 	var req webhookRequest

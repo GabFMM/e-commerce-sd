@@ -16,7 +16,6 @@ func normalizarEmail(email string) string {
 }
 
 // normalizarCategorias filtra as inválidas e remove duplicadas.
-// Sempre devolve um slice não-nil (vazio vira '{}' no Postgres, e não NULL).
 func normalizarCategorias(categorias []string) []string {
 	vistas := map[string]bool{}
 	validas := []string{}
@@ -31,7 +30,6 @@ func normalizarCategorias(categorias []string) []string {
 }
 
 // CadastrarInteresse define a lista de categorias do e-mail (substitui a anterior).
-// Lista vazia é válida: o cliente fica cadastrado, sem receber promoção de nenhuma categoria.
 func CadastrarInteresse(email string, categorias []string) error {
 	emailNorm := normalizarEmail(email)
 	if emailNorm == "" {

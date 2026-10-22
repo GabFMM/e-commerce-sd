@@ -7,12 +7,7 @@ import (
 	"fmt"
 )
 
-func ObterProdutosFiltros(
-	nomeLike string,
-	nomeLikePresente bool,
-	ids []int,
-	idsPresentes bool,
-) ([]dto.ProdutoDTO, error) {
+func ObterProdutosFiltros(nomeLike string, nomeLikePresente bool, ids []int, idsPresentes bool) ([]dto.ProdutoDTO, error) {
 
 	ctx := context.Background()
 	pool := data.Pool("ESTOQUE")

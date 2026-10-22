@@ -1,7 +1,7 @@
 // Mock de pagamento (simula o provedor externo) para testes locais.
 //
 //	POST /cobrancas      {"pedido_id":1,"webhook_url":"..."} -> {"checkout_url":"http://localhost:4200/mock-pagamento/1"}
-//	POST /checkout/{id}  {"status":"APROVADO"|"RECUSADO"}    -> repassa o resultado ao webhook do MS Pagamento
+//	POST /checkout/:id   {"status":"APROVADO"|"RECUSADO"}    -> repassa o resultado ao webhook do MS Pagamento
 package main
 
 import (
@@ -12,9 +12,11 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 )
 
 var (
@@ -39,42 +41,16 @@ func env(chave, padrao string) string {
 	return padrao
 }
 
-func responderJSON(w http.ResponseWriter, status int, corpo any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(corpo)
-}
-
-// Libera o navegador (Angular em outra origem) a chamar este mock.
-func comCORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", frontendOrigin)
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 type cobrancaRequest struct {
-	PedidoID   int    `json:"pedido_id"`
-	WebhookURL string `json:"webhook_url"`
+	PedidoID   int    `json:"pedido_id" binding:"required"`
+	WebhookURL string `json:"webhook_url" binding:"required"`
 }
 
 // Chamado pelo MS Pagamento
-func criarCobranca(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		responderJSON(w, http.StatusMethodNotAllowed, map[string]string{"erro": "método não permitido"})
-		return
-	}
-
+func criarCobranca(c *gin.Context) {
 	var req cobrancaRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.PedidoID == 0 || req.WebhookURL == "" {
-		responderJSON(w, http.StatusBadRequest, map[string]string{"erro": "pedido_id e webhook_url são obrigatórios"})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"erro": "pedido_id e webhook_url são obrigatórios"})
 		return
 	}
 
@@ -84,32 +60,26 @@ func criarCobranca(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[MOCK] Cobrança criada para o pedido %d", req.PedidoID)
 
-	responderJSON(w, http.StatusCreated, map[string]string{
+	c.JSON(http.StatusCreated, gin.H{
 		"checkout_url": fmt.Sprintf("%s/%d", checkoutBaseURL, req.PedidoID),
 	})
 }
 
 type resultadoRequest struct {
-	Status string `json:"status"`
+	Status string `json:"status" binding:"required,oneof=APROVADO RECUSADO"`
 }
 
 // Chamado pela página do Angular
-func registrarResultado(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		responderJSON(w, http.StatusMethodNotAllowed, map[string]string{"erro": "método não permitido"})
-		return
-	}
-
-	id, err := strconv.Atoi(strings.Trim(strings.TrimPrefix(r.URL.Path, "/checkout/"), "/"))
+func registrarResultado(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		responderJSON(w, http.StatusBadRequest, map[string]string{"erro": "id inválido"})
+		c.JSON(http.StatusBadRequest, gin.H{"erro": "id inválido"})
 		return
 	}
 
 	var req resultadoRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil ||
-		(req.Status != "APROVADO" && req.Status != "RECUSADO") {
-		responderJSON(w, http.StatusBadRequest, map[string]string{"erro": "status deve ser APROVADO ou RECUSADO"})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"erro": "status deve ser APROVADO ou RECUSADO"})
 		return
 	}
 
@@ -117,15 +87,15 @@ func registrarResultado(w http.ResponseWriter, r *http.Request) {
 	webhook, existe := cobrancas[id]
 	mu.Unlock()
 	if !existe {
-		responderJSON(w, http.StatusNotFound, map[string]string{"erro": "cobrança não encontrada ou já respondida"})
+		c.JSON(http.StatusNotFound, gin.H{"erro": "cobrança não encontrada ou já respondida"})
 		return
 	}
 
-	corpo, _ := json.Marshal(map[string]any{"pedido_id": id, "status": req.Status})
+	corpo, _ := json.Marshal(gin.H{"pedido_id": id, "status": req.Status})
 	resp, err := client.Post(webhook, "application/json", bytes.NewReader(corpo))
 	if err != nil {
 		log.Printf("[MOCK] Falha ao chamar o webhook do pedido %d: %v", id, err)
-		responderJSON(w, http.StatusBadGateway, map[string]string{"erro": "não foi possível chamar o webhook do MS Pagamento"})
+		c.JSON(http.StatusBadGateway, gin.H{"erro": "não foi possível chamar o webhook do MS Pagamento"})
 		return
 	}
 	defer resp.Body.Close()
@@ -140,7 +110,7 @@ func registrarResultado(w http.ResponseWriter, r *http.Request) {
 			mu.Unlock()
 		}
 
-		responderJSON(w, http.StatusBadGateway, map[string]string{
+		c.JSON(http.StatusBadGateway, gin.H{
 			"erro": fmt.Sprintf("o MS Pagamento respondeu status %d", resp.StatusCode),
 		})
 		return
@@ -151,14 +121,28 @@ func registrarResultado(w http.ResponseWriter, r *http.Request) {
 	mu.Unlock()
 
 	log.Printf("[MOCK] Pedido %d: %s enviado ao webhook", id, req.Status)
-	responderJSON(w, http.StatusOK, map[string]string{"mensagem": "ok"})
+	c.JSON(http.StatusOK, gin.H{"mensagem": "ok"})
 }
 
 func main() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/cobrancas", criarCobranca)
-	mux.HandleFunc("/checkout/", registrarResultado)
+	r := gin.Default()
+
+	// Libera o navegador (Angular em outra origem) a chamar este mock.
+	r.Use(cors.New(cors.Config{
+		AllowOrigins: []string{frontendOrigin},
+		AllowMethods: []string{http.MethodPost, http.MethodOptions},
+		AllowHeaders: []string{"Content-Type"},
+	}))
+
+	// Responde 405 em JSON quando o método não for o esperado
+	r.HandleMethodNotAllowed = true
+	r.NoMethod(func(c *gin.Context) {
+		c.JSON(http.StatusMethodNotAllowed, gin.H{"erro": "método não permitido"})
+	})
+
+	r.POST("/cobrancas", criarCobranca)
+	r.POST("/checkout/:id", registrarResultado)
 
 	log.Printf("[MOCK] Mock de pagamento escutando em %s", addr)
-	log.Fatal(http.ListenAndServe(addr, comCORS(mux)))
+	log.Fatal(r.Run(addr))
 }
