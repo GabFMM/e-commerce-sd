@@ -113,51 +113,47 @@ func sortearPromocao() PromocaoGerada {
 	}
 }
 
-func rodarLoopDePromocoes(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) {
+// rodarLoopDePromocoes sorteia, publica, busca os e-mails e dispara via Resend diretamente.
+func rodarLoopDePromocoes(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, resendApiKey string) {
+	client := resend.NewClient(resendApiKey)
+
 	for {
 		promGer := sortearPromocao()
 		routing := "promocao.categoria." + promGer.Categoria
+
+		// 1. Publica na Exchange "Promoções" no RabbitMQ
 		publicar(publishCh, chavePrivada, routing, promGer)
+
+		// 2. Busca diretamente no banco os e-mails cadastrados nessa categoria
+		emails, err := service.ObterEmailsPorCategoria(promGer.Categoria)
+		if err != nil {
+			log.Printf(" [ERRO BD] Falha ao consultar e-mails da categoria %s: %v", promGer.Categoria, err)
+		} else if len(emails) == 0 {
+			log.Printf(" [INFO] Nenhum usuário cadastrado para a categoria %s", promGer.Categoria)
+		} else {
+			// 3. Dispara os e-mails via Resend
+			log.Printf(" [RESEND] Disparando e-mails para %d usuário(s) da categoria %s...", len(emails), promGer.Categoria)
+			for _, email := range emails {
+				params := &resend.SendEmailRequest{
+					From:    "Promocoes <onboarding@resend.dev>",
+					To:      []string{email},
+					Subject: fmt.Sprintf("Promoção Imperdível: %s com %d%% de Desconto!", promGer.Produto, promGer.Desconto),
+					Html:    fmt.Sprintf("<h1>Nova Promoção!</h1><p>O item <strong>%s</strong> da categoria <strong>%s</strong> está com desconto especial de <strong>%d%%</strong>!</p>", promGer.Produto, promGer.Categoria, promGer.Desconto),
+				}
+
+				sent, err := client.Emails.Send(params)
+				if err != nil {
+					log.Printf(" [ERRO RESEND] Falha ao enviar e-mail para %s: %v", email, err)
+					continue
+				}
+				log.Printf(" [RESEND] E-mail enviado com sucesso para %s | ID: %s", email, sent.Id)
+			}
+		}
 
 		tempoEspera := rand.Intn(16) + 5
 		log.Printf(" [*] Próxima promoção em %d segundos...", tempoEspera)
 		time.Sleep(time.Second * time.Duration(tempoEspera))
 	}
-}
-
-func extrairPromocao(body []byte) (PromocaoGerada, error) {
-	var prom PromocaoGerada
-
-	var envelope struct {
-		Conteudo json.RawMessage `json:"conteudo"`
-		Payload  json.RawMessage `json:"payload"`
-		Dados    json.RawMessage `json:"dados"`
-		Data     json.RawMessage `json:"data"`
-		Body     json.RawMessage `json:"body"`
-	}
-
-	if err := json.Unmarshal(body, &envelope); err == nil {
-		campos := []json.RawMessage{envelope.Conteudo, envelope.Payload, envelope.Dados, envelope.Data, envelope.Body}
-		for _, raw := range campos {
-			if len(raw) > 0 {
-				if err := json.Unmarshal(raw, &prom); err == nil && prom.Produto != "" {
-					return prom, nil
-				}
-				var strPayload string
-				if err := json.Unmarshal(raw, &strPayload); err == nil {
-					if err := json.Unmarshal([]byte(strPayload), &prom); err == nil && prom.Produto != "" {
-						return prom, nil
-					}
-				}
-			}
-		}
-	}
-
-	if err := json.Unmarshal(body, &prom); err == nil && prom.Produto != "" {
-		return prom, nil
-	}
-
-	return prom, fmt.Errorf("impossível extrair promoção de: %s", string(body))
 }
 
 func extrairInteresse(body []byte) (RequisicaoInteresse, error) {
@@ -195,11 +191,10 @@ func extrairInteresse(body []byte) (RequisicaoInteresse, error) {
 	return req, fmt.Errorf("impossível extrair interesse de: %s", string(body))
 }
 
-// Consumidor para registrar os e-mails e categorias no PostgreSQL
+// Consumidor para registrar os e-mails e categorias no PostgreSQL vindos do MS Principal
 func iniciarConsumidorDeInteresses(ch *amqp.Channel) {
 	const exchangePrincipal = "eCommerce"
 
-	// A exchange eCommerce é do tipo "direct"
 	err := ch.ExchangeDeclare(
 		exchangePrincipal,
 		"direct",
@@ -211,7 +206,6 @@ func iniciarConsumidorDeInteresses(ch *amqp.Channel) {
 	)
 	failOnError(err, "Erro ao declarar exchange eCommerce")
 
-	// Fila "promocoes" já declarada e vinculada no setup/rabbitmq.go
 	q, err := ch.QueueDeclare(
 		"promocoes",
 		true,
@@ -260,91 +254,6 @@ func iniciarConsumidorDeInteresses(ch *amqp.Channel) {
 	}()
 }
 
-// Consumidor para enviar os e-mails via Resend
-func iniciarConsumidorDePromocoes(ch *amqp.Channel, resendApiKey string) {
-	err := ch.ExchangeDeclare(
-		NomeExchange,
-		"topic",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	failOnError(err, "Erro ao declarar exchange Promoções")
-
-	q, err := ch.QueueDeclare(
-		"Q2",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	failOnError(err, "Erro ao declarar fila de e-mails")
-
-	err = ch.QueueBind(
-		q.Name,
-		"promocao.categoria.*",
-		NomeExchange,
-		false,
-		nil,
-	)
-	failOnError(err, "Erro ao vincular a fila à exchange")
-
-	msgs, err := ch.Consume(
-		q.Name,
-		"",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	failOnError(err, "Erro ao iniciar o consumo da fila de e-mails")
-
-	client := resend.NewClient(resendApiKey)
-
-	go func() {
-		for d := range msgs {
-			prom, err := extrairPromocao(d.Body)
-			if err != nil {
-				log.Printf(" [ERRO CONSUMIDOR] %v", err)
-				continue
-			}
-
-			log.Printf(" [CONSUMIDOR] Promoção recebida: Categoria %s | Produto: %s (%d%% OFF)", prom.Categoria, prom.Produto, prom.Desconto)
-
-			emails, err := service.ObterEmailsPorCategoria(prom.Categoria)
-			if err != nil {
-				log.Printf(" [ERRO CONSUMIDOR] Erro ao consultar e-mails da categoria %s: %v", prom.Categoria, err)
-				continue
-			}
-
-			if len(emails) == 0 {
-				log.Printf(" [CONSUMIDOR] Nenhum utilizador registrado para a categoria %s", prom.Categoria)
-				continue
-			}
-
-			for _, email := range emails {
-				params := &resend.SendEmailRequest{
-					From:    "Promocoes <onboarding@resend.dev>",
-					To:      []string{email},
-					Subject: fmt.Sprintf("Promoção Imperdível: %s com %d%% de Desconto!", prom.Produto, prom.Desconto),
-					Html:    fmt.Sprintf("<h1>Nova Promoção!</h1><p>O item <strong>%s</strong> da categoria <strong>%s</strong> está com desconto especial de <strong>%d%%</strong>!</p>", prom.Produto, prom.Categoria, prom.Desconto),
-				}
-
-				sent, err := client.Emails.Send(params)
-				if err != nil {
-					log.Printf(" [ERRO RESEND] Falha ao enviar e-mail para %s: %v", email, err)
-					continue
-				}
-				log.Printf(" [RESEND] E-mail enviado com sucesso para %s | ID: %s", email, sent.Id)
-			}
-		}
-	}()
-}
-
 func main() {
 	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
 	failOnError(err, "Erro ao conectar ao RabbitMQ")
@@ -366,17 +275,17 @@ func main() {
 		resendApiKey = "re_SUA_CHAVE_AQUI"
 	}
 
+	// Mantém ativo apenas o consumidor de novos cadastros de interesse do frontend
 	iniciarConsumidorDeInteresses(consumeCh)
-	iniciarConsumidorDePromocoes(consumeCh, resendApiKey)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
 	go func() {
 		defer wg.Done()
-		rodarLoopDePromocoes(publishCh, chavePrivada)
+		rodarLoopDePromocoes(publishCh, chavePrivada, resendApiKey)
 	}()
 
-	log.Printf(" [*] MS Promocoes rodando (Produtor e Consumidores ativos). Pressione CTRL+C para sair.")
+	log.Printf(" [*] MS Promocoes rodando. Pressione CTRL+C para sair.")
 	wg.Wait()
 }

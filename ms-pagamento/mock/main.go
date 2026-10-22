@@ -1,291 +1,148 @@
+// Mock de pagamento (simula o provedor externo) para testes locais.
+//
+//	POST /cobrancas      {"pedido_id":1,"webhook_url":"..."} -> {"checkout_url":"http://localhost:4200/mock-pagamento/1"}
+//	POST /checkout/:id   {"status":"APROVADO"|"RECUSADO"}    -> repassa o resultado ao webhook do MS Pagamento
 package main
 
 import (
-	"context"
-	"crypto/ed25519"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
+	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
-	"e-commerce-sd/ms-promocoes/service"
-	"e-commerce-sd/seguranca"
-
-	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/resend/resend-go/v2"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 )
 
-const NomeExchange = "Promoções"
-const NomeServico = "promocoes"
+var (
+	addr = env("MOCK_PAGAMENTO_ADDR", ":8082")
 
-var Produtos = map[string]string{
-	"Notebook":   "A",
-	"Mouse":      "B",
-	"Teclado":    "B",
-	"Monitor":    "A",
-	"Webcam":     "C",
-	"Headset":    "C",
-	"Impressora": "A",
-	"Cabo HDMI":  "B",
-}
+	// Página do frontend (Angular) onde o usuário aprova ou recusa
+	checkoutBaseURL = env("MOCK_CHECKOUT_BASE_URL", "http://localhost:4200/mock-pagamento")
 
-type PromocaoGerada struct {
-	Produto   string `json:"Produto"`
-	Desconto  int    `json:"Desconto"`
-	Categoria string `json:"Categoria"`
-}
+	// Origem do frontend, liberada no CORS
+	frontendOrigin = env("FRONTEND_ORIGIN", "http://localhost:4200")
 
-type RequisicaoInteresse struct {
-	Email      string   `json:"email"`
-	Categorias []string `json:"categorias"`
-}
+	mu        sync.Mutex
+	cobrancas = map[int]string{} // pedido_id -> webhook_url
 
-func failOnError(err error, msg string) {
-	if err != nil {
-		log.Panicf("%s: %s", msg, err)
+	client = &http.Client{Timeout: 5 * time.Second}
+)
+
+func env(chave, padrao string) string {
+	if v := os.Getenv(chave); v != "" {
+		return v
 	}
+	return padrao
 }
 
-func publicar(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, routingKey string, body PromocaoGerada) {
-	pacotesBytes, err := seguranca.CriarPacote(body, NomeServico, chavePrivada)
-	if err != nil {
-		log.Printf(" [ERRO] falha ao criar pacote assinado: %v no serviço %s", err, NomeServico)
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
+type cobrancaRequest struct {
+	PedidoID   int    `json:"pedido_id" binding:"required"`
+	WebhookURL string `json:"webhook_url" binding:"required"`
+}
 
-	err = publishCh.PublishWithContext(
-		ctx,
-		NomeExchange,
-		routingKey,
-		false,
-		false,
-		amqp.Publishing{
-			ContentType: "application/json",
-			Body:        pacotesBytes,
-		},
-	)
-
-	if err != nil {
-		log.Printf(" [ERRO] Falha ao publicar %s: %v", routingKey, err)
+// Chamado pelo MS Pagamento
+func criarCobranca(c *gin.Context) {
+	var req cobrancaRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"erro": "pedido_id e webhook_url são obrigatórios"})
 		return
 	}
 
-	log.Printf(" [LOG] Publicado %s para pedido %s", routingKey, body.Produto)
+	mu.Lock()
+	cobrancas[req.PedidoID] = req.WebhookURL
+	mu.Unlock()
+
+	log.Printf("[MOCK] Cobrança criada para o pedido %d", req.PedidoID)
+
+	c.JSON(http.StatusCreated, gin.H{
+		"checkout_url": fmt.Sprintf("%s/%d", checkoutBaseURL, 77),
+	})
 }
 
-func sortearCategoria() string {
-	var sorteado int = rand.Int() % 3
-	switch sorteado {
-	case 0:
-		return "A"
-	case 1:
-		return "B"
-	case 2:
-		return "C"
-	default:
-		return "A"
-	}
+type resultadoRequest struct {
+	Status string `json:"status" binding:"required,oneof=APROVADO RECUSADO"`
 }
 
-func sortearPromocao() PromocaoGerada {
-	categoria := sortearCategoria()
-
-	var produtosDaCategoria []string
-	for produto, categ := range Produtos {
-		if categ == categoria {
-			produtosDaCategoria = append(produtosDaCategoria, produto)
-		}
+// Chamado pela página do Angular
+func registrarResultado(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"erro": "id inválido"})
+		return
 	}
 
-	indiceProduto := rand.Intn(len(produtosDaCategoria))
-	produtoSorteado := produtosDaCategoria[indiceProduto]
-	descontoSorteado := (rand.Intn(9) * 5) + 10
-
-	return PromocaoGerada{
-		Produto:   produtoSorteado,
-		Desconto:  descontoSorteado,
-		Categoria: categoria,
+	var req resultadoRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"erro": "status deve ser APROVADO ou RECUSADO"})
+		return
 	}
-}
 
-// rodarLoopDePromocoes sorteia, publica, busca os e-mails e dispara via Resend diretamente.
-func rodarLoopDePromocoes(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey, resendApiKey string) {
-	client := resend.NewClient(resendApiKey)
+	mu.Lock()
+	webhook, existe := cobrancas[id]
+	mu.Unlock()
+	if !existe {
+		c.JSON(http.StatusNotFound, gin.H{"erro": "cobrança não encontrada ou já respondida"})
+		return
+	}
 
-	for {
-		promGer := sortearPromocao()
-		routing := "promocao.categoria." + promGer.Categoria
+	corpo, _ := json.Marshal(gin.H{"pedido_id": id, "status": req.Status})
+	resp, err := client.Post(webhook, "application/json", bytes.NewReader(corpo))
+	if err != nil {
+		log.Printf("[MOCK] Falha ao chamar o webhook do pedido %d: %v", id, err)
+		c.JSON(http.StatusBadGateway, gin.H{"erro": "não foi possível chamar o webhook do MS Pagamento"})
+		return
+	}
+	defer resp.Body.Close()
 
-		// 1. Publica na Exchange "Promoções" no RabbitMQ
-		publicar(publishCh, chavePrivada, routing, promGer)
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[MOCK] Webhook do pedido %d respondeu %d", id, resp.StatusCode)
 
-		// 2. Busca diretamente no banco os e-mails cadastrados nessa categoria
-		emails, err := service.ObterEmailsPorCategoria(promGer.Categoria)
-		if err != nil {
-			log.Printf(" [ERRO BD] Falha ao consultar e-mails da categoria %s: %v", promGer.Categoria, err)
-		} else if len(emails) == 0 {
-			log.Printf(" [INFO] Nenhum usuário cadastrado para a categoria %s", promGer.Categoria)
-		} else {
-			// 3. Dispara os e-mails via Resend
-			log.Printf(" [RESEND] Disparando e-mails para %d usuário(s) da categoria %s...", len(emails), promGer.Categoria)
-			for _, email := range emails {
-				params := &resend.SendEmailRequest{
-					From:    "Promocoes <onboarding@resend.dev>",
-					To:      []string{email},
-					Subject: fmt.Sprintf("Promoção Imperdível: %s com %d%% de Desconto!", promGer.Produto, promGer.Desconto),
-					Html:    fmt.Sprintf("<h1>Nova Promoção!</h1><p>O item <strong>%s</strong> da categoria <strong>%s</strong> está com desconto especial de <strong>%d%%</strong>!</p>", promGer.Produto, promGer.Categoria, promGer.Desconto),
-				}
-
-				sent, err := client.Emails.Send(params)
-				if err != nil {
-					log.Printf(" [ERRO RESEND] Falha ao enviar e-mail para %s: %v", email, err)
-					continue
-				}
-				log.Printf(" [RESEND] E-mail enviado com sucesso para %s | ID: %s", email, sent.Id)
-			}
+		// O MS Pagamento não reconhece mais essa cobrança (já processada ou reiniciado)
+		if resp.StatusCode == http.StatusNotFound {
+			mu.Lock()
+			delete(cobrancas, id)
+			mu.Unlock()
 		}
 
-		tempoEspera := rand.Intn(16) + 5
-		log.Printf(" [*] Próxima promoção em %d segundos...", tempoEspera)
-		time.Sleep(time.Second * time.Duration(tempoEspera))
-	}
-}
-
-func extrairInteresse(body []byte) (RequisicaoInteresse, error) {
-	var req RequisicaoInteresse
-
-	var envelope struct {
-		Conteudo json.RawMessage `json:"conteudo"`
-		Payload  json.RawMessage `json:"payload"`
-		Dados    json.RawMessage `json:"dados"`
-		Data     json.RawMessage `json:"data"`
-		Body     json.RawMessage `json:"body"`
+		c.JSON(http.StatusBadGateway, gin.H{
+			"erro": fmt.Sprintf("o MS Pagamento respondeu status %d", resp.StatusCode),
+		})
+		return
 	}
 
-	if err := json.Unmarshal(body, &envelope); err == nil {
-		campos := []json.RawMessage{envelope.Conteudo, envelope.Payload, envelope.Dados, envelope.Data, envelope.Body}
-		for _, raw := range campos {
-			if len(raw) > 0 {
-				if err := json.Unmarshal(raw, &req); err == nil && req.Email != "" {
-					return req, nil
-				}
-				var strPayload string
-				if err := json.Unmarshal(raw, &strPayload); err == nil {
-					if err := json.Unmarshal([]byte(strPayload), &req); err == nil && req.Email != "" {
-						return req, nil
-					}
-				}
-			}
-		}
-	}
+	mu.Lock()
+	delete(cobrancas, id)
+	mu.Unlock()
 
-	if err := json.Unmarshal(body, &req); err == nil && req.Email != "" {
-		return req, nil
-	}
-
-	return req, fmt.Errorf("impossível extrair interesse de: %s", string(body))
-}
-
-// Consumidor para registrar os e-mails e categorias no PostgreSQL vindos do MS Principal
-func iniciarConsumidorDeInteresses(ch *amqp.Channel) {
-	const exchangePrincipal = "eCommerce"
-
-	err := ch.ExchangeDeclare(
-		exchangePrincipal,
-		"direct",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	failOnError(err, "Erro ao declarar exchange eCommerce")
-
-	q, err := ch.QueueDeclare(
-		"promocoes",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	failOnError(err, "Erro ao declarar fila de cadastro de interesses")
-
-	err = ch.QueueBind(
-		q.Name,
-		"interesse.promocao",
-		exchangePrincipal,
-		false,
-		nil,
-	)
-	failOnError(err, "Erro ao vincular fila de interesses à exchange eCommerce")
-
-	msgs, err := ch.Consume(
-		q.Name,
-		"",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	failOnError(err, "Erro ao iniciar consumidor de interesses")
-
-	go func() {
-		for d := range msgs {
-			req, err := extrairInteresse(d.Body)
-			if err != nil {
-				log.Printf(" [ERRO CONSUMIDOR INTERESSE] %v", err)
-				continue
-			}
-
-			err = service.CadastrarInteresse(req.Email, req.Categorias)
-			if err != nil {
-				log.Printf(" [ERRO BD] Falha ao registrar interesse: %v", err)
-			} else {
-				log.Printf(" [INTERESSE REGISTRADO] Email: %s | Categorias: %v", req.Email, req.Categorias)
-			}
-		}
-	}()
+	log.Printf("[MOCK] Pedido %d: %s enviado ao webhook", id, req.Status)
+	c.JSON(http.StatusOK, gin.H{"mensagem": "ok"})
 }
 
 func main() {
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
-	failOnError(err, "Erro ao conectar ao RabbitMQ")
-	defer conn.Close()
+	r := gin.Default()
 
-	publishCh, err := conn.Channel()
-	failOnError(err, "Erro ao abrir channel de publicação")
-	defer publishCh.Close()
+	// Libera o navegador (Angular em outra origem) a chamar este mock.
+	r.Use(cors.New(cors.Config{
+		AllowOrigins: []string{frontendOrigin},
+		AllowMethods: []string{http.MethodPost, http.MethodOptions},
+		AllowHeaders: []string{"Content-Type"},
+	}))
 
-	consumeCh, err := conn.Channel()
-	failOnError(err, "Erro ao abrir channel de consumo")
-	defer consumeCh.Close()
+	// Responde 405 em JSON quando o método não for o esperado
+	r.HandleMethodNotAllowed = true
+	r.NoMethod(func(c *gin.Context) {
+		c.JSON(http.StatusMethodNotAllowed, gin.H{"erro": "método não permitido"})
+	})
 
-	chavePrivada, err := seguranca.CarregarChavePrivada("ms-promocoes/chaves/promocoes_private.pem")
-	failOnError(err, "Erro ao carregar chave privada do MS Promocoes")
+	r.POST("/cobrancas", criarCobranca)
+	r.POST("/checkout/:id", registrarResultado)
 
-	resendApiKey := os.Getenv("RESEND_API_KEY")
-	if resendApiKey == "" {
-		resendApiKey = "re_SUA_CHAVE_AQUI"
-	}
-
-	// Mantém ativo apenas o consumidor de novos cadastros de interesse do frontend
-	iniciarConsumidorDeInteresses(consumeCh)
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		rodarLoopDePromocoes(publishCh, chavePrivada, resendApiKey)
-	}()
-
-	log.Printf(" [*] MS Promocoes rodando. Pressione CTRL+C para sair.")
-	wg.Wait()
+	log.Printf("[MOCK] Mock de pagamento escutando em %s", addr)
+	log.Fatal(r.Run(addr))
 }
