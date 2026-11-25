@@ -31,7 +31,6 @@ RESEND_API_KEY=re_xxxxxxxxxxxx
 | GET    | `/produtos`                | Lista produtos               | 200     |
 | POST   | `/pedidos`                 | Cria pedido                  | 201     |
 | GET    | `/pedidos`                 | Lista pedidos (`?situacao=`) | 200     |
-| GET    | `/pedidos/{id}`            | Consulta pedido              | 200     |
 | DELETE | `/pedidos/{id}`            | Exclui pedido                | 204     |
 | GET    | `/eventos`                 | Stream SSE de status         | 200     |
 | POST   | `/promocoes/interesse`     | Cadastra interesse           | 201     |
@@ -118,26 +117,6 @@ Situação inválida → `400`:
 
 ---
 
-### GET `/pedidos/{id}`
-
-```bash
-curl http://localhost:8080/api/pedidos/12
-```
-
-Resposta `200` (exemplo ilustrativo):
-
-```json
-{ "id": 12, "situacao": "ENVIADO" }
-```
-
-Erros: `400` (id inválido) e `404`:
-
-```json
-{ "erro": "pedido não encontrado" }
-```
-
----
-
 ### DELETE `/pedidos/{id}`
 
 ```bash
@@ -170,7 +149,7 @@ data:{"tipo":"pagamento.aprovado","pedido_id":12,"situacao":"PAGAMENTO_APROVADO"
 | `pedido.enviado`       | `ENVIADO`              |
 
 - Todos os clientes conectados recebem todos os eventos.
-- Eventos enviados sem ninguém conectado são perdidos: ao abrir, consulte `GET /pedidos/{id}`.
+- Eventos enviados sem ninguém conectado são perdidos: ao abrir ou reconectar, o frontend atualiza a lista com `GET /pedidos`.
 - Linhas `: conectado` e `: ping` são comentários SSE (só aparecem no curl).
 
 Exemplo no navegador:

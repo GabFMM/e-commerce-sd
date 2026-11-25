@@ -193,22 +193,6 @@ func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin
 			c.JSON(http.StatusOK, pedidos)
 		})
 
-		api.GET("/pedidos/:id", func(c *gin.Context) {
-			id, err := strconv.Atoi(c.Param("id"))
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"erro": "id inválido"})
-				return
-			}
-
-			pedido := service.ObterPedido(id)
-			if pedido == nil {
-				c.JSON(http.StatusNotFound, gin.H{"erro": "pedido não encontrado"})
-				return
-			}
-
-			c.JSON(http.StatusOK, pedido)
-		})
-
 		api.POST("/pedidos", func(c *gin.Context) {
 			var req CriarPedidoRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
@@ -261,15 +245,12 @@ func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin
 				return
 			}
 
-			// ExcluirPedido só devolve bool, então checamos a existência antes
-			// para conseguir responder 404 em vez de 500.
-			if service.ObterPedido(id) == nil {
-				c.JSON(http.StatusNotFound, gin.H{"erro": "pedido não encontrado"})
-				return
-			}
-
-			if !service.ExcluirPedido(id) {
-				c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível excluir o pedido"})
+			if err := service.ExcluirPedido(id); err != nil {
+				if errors.Is(err, service.ErrPedidoNaoEncontrado) {
+					c.JSON(http.StatusNotFound, gin.H{"erro": "pedido não encontrado"})
+				} else {
+					c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível excluir o pedido"})
+				}
 				return
 			}
 

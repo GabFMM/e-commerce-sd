@@ -70,7 +70,6 @@ Princípio de projeto: **cada serviço tem o seu próprio banco** (o Pagamento e
 | GET | `/api/produtos` | Repassa a consulta ao MS Estoque |
 | POST | `/api/pedidos` | Cria pedido |
 | GET | `/api/pedidos` | Lista pedidos (filtro `?situacao=`) |
-| GET | `/api/pedidos/{id}` | Consulta um pedido |
 | DELETE | `/api/pedidos/{id}` | Exclui pedido |
 | GET | `/api/eventos` | Stream SSE |
 | POST / DELETE | `/api/promocoes/interesse` | Cadastra / cancela interesse em promoções |

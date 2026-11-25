@@ -135,7 +135,9 @@ func ObterPedidos() []Pedido {
 // ExcluirPedido apaga o pedido (os itens saem junto, por ON DELETE CASCADE).
 // A devolução do estoque NÃO é feita aqui: o banco do Principal não tem mais
 // "reservados". Quem devolve é o MS Estoque, ao consumir o evento pedido.excluido.
-func ExcluirPedido(pedidoId int) bool {
+var ErrPedidoNaoEncontrado = errors.New("pedido não encontrado")
+
+func ExcluirPedido(pedidoId int) error {
 	ctx := context.Background()
 	pool := data.Pool("PRINCIPAL")
 
@@ -146,45 +148,16 @@ func ExcluirPedido(pedidoId int) bool {
 			pedidoId,
 			err,
 		)
-		return false
+		return fmt.Errorf("excluir pedido %d: %w", pedidoId, err)
 	}
 
 	if resultado.RowsAffected() == 0 {
 		log.Printf("[ERRO-MS-PRINCIPAL] Pedido não encontrado. PedidoId=%d", pedidoId)
-		return false
+		return ErrPedidoNaoEncontrado
 	}
 
 	log.Printf("[INFO-MS-PRINCIPAL] Pedido %d removido", pedidoId)
-	return true
-}
-
-func ObterPedido(pedidoId int) *Pedido {
-	ctx := context.Background()
-	pool := data.Pool("PRINCIPAL")
-
-	query := `
-		SELECT id, situacao
-		FROM pedidos
-		WHERE id = $1
-	`
-
-	var pedido Pedido
-
-	err := pool.QueryRow(ctx, query, pedidoId).Scan(
-		&pedido.Id,
-		&pedido.Situacao,
-	)
-
-	if err != nil {
-		log.Printf(
-			"[ERRO-MS-PRINCIPAL] Não foi possível consultar o pedido. PedidoId=%d: %v",
-			pedidoId,
-			err,
-		)
-		return nil
-	}
-
-	return &pedido
+	return nil
 }
 
 func ObterPedidosPorSituacao(situacao string) []Pedido {
