@@ -92,7 +92,7 @@ sequenceDiagram
     participant MK as Mock
     participant EN as Entrega
 
-    FE->>PR: POST /api/pedidos
+    FE->>PR: GraphQL mutation criarPedido
     PR->>PR: grava pedido CRIADO
     PR-->>FE: 201 com id
     PR->>ES: pedido.criado
@@ -183,10 +183,10 @@ Toda mensagem publicada tem este formato no corpo AMQP:
 
 Geradas por `GerarChaves()` (chamada pelo setup), uma vez por execução do `make setup`/`make dev`:
 
-- Cada serviço (`principal`, `estoque`, `pagamento`, `entrega`, `promocoes`) recebe um par Ed25519 em `ms-<nome>/chaves/`: `<nome>_private.pem` (permissão `0600`) e `<nome>_public.pem`.
-- A chave **pública** de cada serviço é copiada para a pasta `chaves/` de todos os outros. A chave privada **nunca** sai da pasta do dono.
-- A chave pública do Promoções também é copiada para `consumidor/chaves/`.
-- Cada serviço carrega suas chaves de `ms-<nome>/chaves/` ao iniciar: a própria privada (para assinar) e todas as públicas (para verificar).
+- Cada serviço (`principal`, `estoque`, `pagamento`, `entrega`, `promocoes`) recebe um par Ed25519 em `ms-<nome>/.chaves/`: `<nome>_private.pem` (permissão `0600`) e `<nome>_public.pem`.
+- A chave **pública** de cada serviço é copiada para a pasta `.chaves/` de todos os outros. A chave privada **nunca** sai da pasta do dono.
+- A chave pública do Promoções também é copiada para `consumidor/.chaves/`.
+- Cada serviço carrega suas chaves de `ms-<nome>/.chaves/` ao iniciar: a própria privada (para assinar) e todas as públicas (para verificar).
 
 > Como as chaves são **regeneradas a cada setup**, todos os serviços precisam ser iniciados depois dele. Se um serviço antigo continuar rodando com chaves antigas, as mensagens dele serão descartadas com "assinatura inválida".
 

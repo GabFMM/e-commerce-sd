@@ -86,7 +86,7 @@ func main() {
 	failOnError(err, "Erro ao abrir channel de consume")
 	defer consumeCh.Close()
 
-	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("consumidor/chaves")
+	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("consumidor/.chaves")
 	failOnError(err, "Erro ao carregar chaves públicas do consumidor")
 
 	var wg sync.WaitGroup

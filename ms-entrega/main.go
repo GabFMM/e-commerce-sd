@@ -132,11 +132,11 @@ func main() {
 	defer consumeCh.Close()
 
 	// Própria chave privada, usada para assinar tudo que publicarmos.
-	chavePrivada, err := seguranca.CarregarChavePrivada("ms-entrega/chaves/entrega_private.pem")
+	chavePrivada, err := seguranca.CarregarChavePrivada("ms-entrega/.chaves/entrega_private.pem")
 	failOnError(err, "Erro ao carregar chave privada do MS Entrega")
 
 	// Chaves públicas de todos os outros microsserviços
-	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("ms-entrega/chaves")
+	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("ms-entrega/.chaves")
 	failOnError(err, "Erro ao carregar chaves públicas")
 
 	var wg sync.WaitGroup

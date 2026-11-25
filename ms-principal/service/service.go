@@ -4,6 +4,7 @@ import (
 	"context"
 	"e-commerce-sd/data"
 	"e-commerce-sd/ms-principal/dto"
+	"e-commerce-sd/ms-principal/graph/model"
 	"errors"
 	"fmt"
 	"log"
@@ -11,15 +12,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
-
-type Pedido struct {
-	Id       int          `json:"id"`
-	Situacao string       `json:"situacao"`
-
-	// Chave corresponde ao ID do produto
-	// Valor corresponde a quantidade requisitada
-	Produtos map[int]int  `json:"produtos"`
-}
 
 func AtualizarSituacaoPedido(pedidoDTO dto.PedidoDTO, novaSituacao string) {
 	ctx := context.Background()
@@ -48,7 +40,7 @@ func AtualizarSituacaoPedido(pedidoDTO dto.PedidoDTO, novaSituacao string) {
 	)
 }
 
-func ObterPedidos() []Pedido {
+func ObterPedidos() []*model.Pedido {
 	ctx := context.Background()
 	pool := data.Pool("PRINCIPAL")
 
@@ -73,16 +65,16 @@ func ObterPedidos() []Pedido {
 	}
 	defer rows.Close()
 
-	pedidosMap := make(map[int]*Pedido)
+	pedidosMap := make(map[int]*model.Pedido)
 
 	for rows.Next() {
 
 		// Representa a relação de um pedido para um produto
 		var (
-			id          int
-			situacao    string
-			produto_id  int
-			quantidade  int
+			id         int
+			situacao   string
+			produto_id int
+			quantidade int
 		)
 
 		if err := rows.Scan(
@@ -98,19 +90,22 @@ func ObterPedidos() []Pedido {
 			continue
 		}
 
-		pedido, existe := pedidosMap[id]
+		pedido, existe := pedidosMap[int(id)]
 
 		if !existe {
-			pedido = &Pedido{
-				Id:       id,
-				Situacao: situacao,
-				Produtos: make(map[int]int),
+			pedido = &model.Pedido{
+				ID:       int32(id),
+				Situacao: model.Situacao(situacao),
+				Produtos: []*model.ItemPedido{},
 			}
 
-			pedidosMap[id] = pedido
+			pedidosMap[int(id)] = pedido
 		}
 
-		pedido.Produtos[produto_id] = quantidade
+		pedido.Produtos = append(pedido.Produtos, &model.ItemPedido{
+			ProdutoID:  int32(produto_id),
+			Quantidade: int32(quantidade),
+		})
 	}
 
 	if err := rows.Err(); err != nil {
@@ -118,14 +113,14 @@ func ObterPedidos() []Pedido {
 		return nil
 	}
 
-	pedidos := make([]Pedido, 0, len(pedidosMap))
+	pedidos := make([]*model.Pedido, 0, len(pedidosMap))
 
 	for _, pedido := range pedidosMap {
-		pedidos = append(pedidos, *pedido)
+		pedidos = append(pedidos, pedido)
 	}
 
 	// Iterar um map não tem ordem fixa: ordena por id para a lista não "pular" a cada chamada
-	sort.Slice(pedidos, func(i, j int) bool { return pedidos[i].Id < pedidos[j].Id })
+	sort.Slice(pedidos, func(i, j int) bool { return pedidos[i].ID < pedidos[j].ID })
 
 	log.Printf("[INFO-MS-PRINCIPAL] Pedidos do usuário recuperados do banco de dados")
 
@@ -160,67 +155,21 @@ func ExcluirPedido(pedidoId int) error {
 	return nil
 }
 
-func ObterPedidosPorSituacao(situacao string) []Pedido {
-	ctx := context.Background()
-	pool := data.Pool("PRINCIPAL")
-
-	query := `
-        SELECT id, situacao
-        FROM pedidos
-        WHERE situacao = $1
-        ORDER BY id
-    `
-
-	rows, err := pool.Query(ctx, query, situacao)
-	if err != nil {
-		log.Printf(
-			"[ERRO-MS-PRINCIPAL] Não foi possível consultar pedidos. Situacao=%s: %v",
-			situacao,
-			err,
-		)
-		return nil // Retorna nil apenas em caso de erro real de banco
-	}
-	defer rows.Close()
-
-	// Inicializa o slice como vazio para evitar retornar nil quando não houver resultados
-	pedidos := []Pedido{}
-
-	for rows.Next() {
-		var pedido Pedido
-
-		err := rows.Scan(
-			&pedido.Id,
-			&pedido.Situacao,
-		)
-
-		if err != nil {
-			log.Printf(
-				"[ERRO-MS-PRINCIPAL] Não foi possível ler pedido. %v",
-				err,
-			)
-			return nil
-		}
-
-		pedidos = append(pedidos, pedido)
-	}
-
-	return pedidos
-}
-
 var (
 	ErrPedidoSemItens     = errors.New("pedido sem itens")
+	ErrItemInvalido       = errors.New("produto e quantidade devem ser maiores que zero")
 	ErrProdutoInexistente = errors.New("produto inexistente")
 	ErrItemDuplicado      = errors.New("produto repetido no pedido")
 )
 
-type ItemPedido struct {
-	ProdutoId  int
-	Quantidade int
-}
-
-func CriarPedidoComItens(itens []ItemPedido) (int, error) {
+func CriarPedidoComItens(itens []*model.ItemPedidoInput) (int, error) {
 	if len(itens) == 0 {
 		return 0, ErrPedidoSemItens
+	}
+	for _, item := range itens {
+		if item == nil || item.ProdutoID < 1 || item.Quantidade < 1 {
+			return 0, ErrItemInvalido
+		}
 	}
 
 	ctx := context.Background()
@@ -252,13 +201,13 @@ func CriarPedidoComItens(itens []ItemPedido) (int, error) {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO pedidos_produtos (pedido_id, produto_id, quantidade)
 			VALUES ($1, $2, $3)
-		`, pedidoId, item.ProdutoId, item.Quantidade)
+		`, pedidoId, item.ProdutoID, item.Quantidade)
 
 		if err != nil {
 			log.Printf(
 				"[ERRO-MS-PRINCIPAL] Não foi possível adicionar o produto no pedido. PedidoId=%d, ProdutoId=%d: %v",
 				pedidoId,
-				item.ProdutoId,
+				item.ProdutoID,
 				err,
 			)
 
@@ -266,9 +215,9 @@ func CriarPedidoComItens(itens []ItemPedido) (int, error) {
 			if errors.As(err, &pgErr) {
 				switch pgErr.Code {
 				case "23503": // foreign_key_violation
-					return 0, fmt.Errorf("%w: id=%d", ErrProdutoInexistente, item.ProdutoId)
+					return 0, fmt.Errorf("%w: id=%d", ErrProdutoInexistente, item.ProdutoID)
 				case "23505": // unique_violation
-					return 0, fmt.Errorf("%w: id=%d", ErrItemDuplicado, item.ProdutoId)
+					return 0, fmt.Errorf("%w: id=%d", ErrItemDuplicado, item.ProdutoID)
 				}
 			}
 

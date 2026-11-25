@@ -267,7 +267,7 @@ func main() {
 	failOnError(err, "Erro ao abrir channel de consumo")
 	defer consumeCh.Close()
 
-	chavePrivada, err := seguranca.CarregarChavePrivada("ms-promocoes/chaves/promocoes_private.pem")
+	chavePrivada, err := seguranca.CarregarChavePrivada("ms-promocoes/.chaves/promocoes_private.pem")
 	failOnError(err, "Erro ao carregar chave privada do MS Promocoes")
 
 	resendApiKey := os.Getenv("RESEND_API_KEY")

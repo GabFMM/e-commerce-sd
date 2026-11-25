@@ -61,6 +61,17 @@ O comando `make frontend` instala as dependências do frontend e inicia o servid
 | `make frontend` | Instala as dependências e inicia o frontend |
 | `make dev` | Inicia o projeto completo |
 
+### 5. Gerar o código GraphQL
+
+Execute o comando correspondente na raiz do projeto após alterar o schema do microsserviço:
+
+| Microsserviço | Schema | Comando |
+|---|---|---|
+| MS Principal | `ms-principal/graph/schema.graphqls` | `go run github.com/99designs/gqlgen generate --config gqlgen-principal.yml` |
+| MS Estoque | `ms-estoque/graph/schema.graphqls` | `go run github.com/99designs/gqlgen generate --config gqlgen-estoque.yml` |
+
+Cada configuração grava os resolvers e modelos gerados no diretório `graph/` do respectivo microsserviço.
+
 ### Observações
 
 - Execute os comandos a partir da raiz do projeto.

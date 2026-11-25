@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"e-commerce-sd/data"
 	"e-commerce-sd/ms-principal/dto"
+	"e-commerce-sd/ms-principal/graph"
 	"e-commerce-sd/ms-principal/service"
 	"e-commerce-sd/seguranca"
 	"encoding/json"
@@ -13,14 +14,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"slices"
-	"strconv"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/gin-contrib/cors"
 
+	gqlhandler "github.com/99designs/gqlgen/graphql/handler"
 	"github.com/gin-gonic/gin"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -45,24 +45,6 @@ func printOnError(err error, msg string) {
 	if err != nil {
 		log.Printf("%s: %s\n", msg, err)
 	}
-}
-
-type ItemRequest struct {
-	ProdutoID  int `json:"produto_id" binding:"required,min=1"`
-	Quantidade int `json:"quantidade" binding:"required,min=1"`
-}
-
-type CriarPedidoRequest struct {
-	Itens []ItemRequest `json:"itens" binding:"required,min=1,dive"`
-}
-
-var situacoesValidas = []string{
-	"CRIADO",
-	"ESTOQUE_DISPONIVEL",
-	"ESTOQUE_INDISPONIVEL",
-	"PAGAMENTO_APROVADO",
-	"PAGAMENTO_RECUSADO",
-	"ENVIADO",
 }
 
 type PayloadEvento struct {
@@ -107,10 +89,10 @@ func main() {
 	)
 	failOnError(err, "[ERRO-MS-PRINCIPAL] Falha ao registrar na fila do consumidor")
 
-	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("ms-principal/chaves/")
+	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("ms-principal/.chaves/")
 	failOnError(err, "[ERRO-MS-PRINCIPAL] Não foi possível carregar as chaves públicas")
 
-	chavePrivada, err := seguranca.CarregarChavePrivada("ms-principal/chaves/principal_private.pem")
+	chavePrivada, err := seguranca.CarregarChavePrivada("ms-principal/.chaves/principal_private.pem")
 	failOnError(err, "[ERRO-MS-PRINCIPAL] Não foi possível carregar chave privada")
 
 	// Consumer RabbitMQ em goroutine
@@ -156,111 +138,22 @@ func montarRouter(publishCh *amqp.Channel, chavePrivada ed25519.PrivateKey) *gin
 
 	api := r.Group("/api")
 
+	graphqlResolver := &graph.Resolver{
+		PublicarPedidoCriado: func(pedido dto.PedidoCriadoDTO) error {
+			return publicar(publishCh, chavePrivada, "pedido.criado", pedido)
+		},
+		PublicarPedidoExcluido: func(pedido dto.PedidoDTO) error {
+			return publicar(publishCh, chavePrivada, "pedido.excluido", pedido)
+		},
+	}
+
+	graphqlServer := gqlhandler.NewDefaultServer(
+		graph.NewExecutableSchema(graph.Config{Resolvers: graphqlResolver}),
+	)
+
+	api.POST("/graphql", gin.WrapH(graphqlServer))
+
 	{
-		// A lista de produtos vem do MS Estoque (REST), não do banco do Principal
-		api.GET("/produtos", func(c *gin.Context) {
-			corpoJSON, err := service.ObterProdutosDoEstoque(c.Request.URL.RawQuery)
-
-			if err != nil {
-				log.Printf("[ERRO-MS-PRINCIPAL] Falha ao consultar MS Estoque: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível recuperar produtos"})
-				return
-			}
-			c.Data(http.StatusOK, "application/json; charset=utf-8", corpoJSON)
-		})
-
-		api.GET("/pedidos", func(c *gin.Context) {
-			situacao := c.Query("situacao")
-
-			var pedidos []service.Pedido
-
-			if situacao == "" {
-				pedidos = service.ObterPedidos()
-			} else {
-				if !slices.Contains(situacoesValidas, situacao) {
-					c.JSON(http.StatusBadRequest, gin.H{"erro": "situação inválida"})
-					return
-				}
-				pedidos = service.ObterPedidosPorSituacao(situacao)
-			}
-
-			// nil = erro de banco (lista vazia deve vir como []Pedido{}, não nil)
-			if pedidos == nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível consultar os pedidos"})
-				return
-			}
-
-			c.JSON(http.StatusOK, pedidos)
-		})
-
-		api.POST("/pedidos", func(c *gin.Context) {
-			var req CriarPedidoRequest
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"erro": err.Error()})
-				return
-			}
-
-			itens := make([]service.ItemPedido, 0, len(req.Itens))
-			for _, item := range req.Itens {
-				itens = append(itens, service.ItemPedido{
-					ProdutoId:  item.ProdutoID,
-					Quantidade: item.Quantidade,
-				})
-			}
-
-			id, err := service.CriarPedidoComItens(itens)
-			if err != nil {
-				switch {
-				case errors.Is(err, service.ErrPedidoSemItens),
-					errors.Is(err, service.ErrProdutoInexistente),
-					errors.Is(err, service.ErrItemDuplicado):
-					c.JSON(http.StatusBadRequest, gin.H{"erro": err.Error()})
-				default:
-					c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível criar o pedido"})
-				}
-				return
-			}
-
-			// Só publica depois do commit do pedido
-			itensDTO := make([]dto.ItemDTO, 0, len(req.Itens))
-			for _, item := range req.Itens {
-				itensDTO = append(itensDTO, dto.ItemDTO{
-					ProdutoId:  item.ProdutoID,
-					Quantidade: item.Quantidade,
-				})
-			}
-
-			pedido := dto.PedidoCriadoDTO{Id: id, Itens: itensDTO}
-
-			err = publicar(publishCh, chavePrivada, "pedido.criado", pedido)
-			printOnError(err, "[ERRO-MS-PRINCIPAL] Pedido criado, mas falhou ao publicar pedido.criado")
-
-			c.JSON(http.StatusCreated, gin.H{"id": id, "situacao": "CRIADO"})
-		})
-
-		api.DELETE("/pedidos/:id", func(c *gin.Context) {
-			id, err := strconv.Atoi(c.Param("id"))
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"erro": "id inválido"})
-				return
-			}
-
-			if err := service.ExcluirPedido(id); err != nil {
-				if errors.Is(err, service.ErrPedidoNaoEncontrado) {
-					c.JSON(http.StatusNotFound, gin.H{"erro": "pedido não encontrado"})
-				} else {
-					c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possível excluir o pedido"})
-				}
-				return
-			}
-
-			// Avisa o MS Estoque, que devolve as reservas no banco dele
-			err = publicar(publishCh, chavePrivada, "pedido.excluido", dto.PedidoDTO{Id: id})
-			printOnError(err, "[ERRO-MS-PRINCIPAL] Pedido excluído, mas falhou ao publicar pedido.excluido")
-
-			c.Status(http.StatusNoContent) // 204 não tem body
-		})
-
 		api.GET("/eventos", streamEventos)
 
 		api.POST("/promocoes/interesse", func(c *gin.Context) {

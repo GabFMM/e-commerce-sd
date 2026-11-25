@@ -3,11 +3,11 @@ package service
 import (
 	"context"
 	"e-commerce-sd/data"
-	"e-commerce-sd/ms-estoque/dto"
+	"e-commerce-sd/ms-estoque/graph/model"
 	"fmt"
 )
 
-func ObterProdutosFiltros(nomeLike string, nomeLikePresente bool, ids []int, idsPresentes bool) ([]dto.ProdutoDTO, error) {
+func ObterProdutosFiltros(nomeLike string, nomeLikePresente bool, ids []int32, idsPresentes bool) ([]*model.Produto, error) {
 
 	ctx := context.Background()
 	pool := data.Pool("ESTOQUE")
@@ -33,7 +33,7 @@ func ObterProdutosFiltros(nomeLike string, nomeLikePresente bool, ids []int, ids
 
 	if idsPresentes {
 		if len(ids) == 0 {
-			return []dto.ProdutoDTO{}, nil
+			return []*model.Produto{}, nil
 		}
 
 		args = append(args, ids)
@@ -48,13 +48,13 @@ func ObterProdutosFiltros(nomeLike string, nomeLikePresente bool, ids []int, ids
 	}
 	defer rows.Close()
 
-	produtos := make([]dto.ProdutoDTO, 0)
+	produtos := make([]*model.Produto, 0)
 
 	for rows.Next() {
-		var p dto.ProdutoDTO
+		var p model.Produto
 
 		if err := rows.Scan(
-			&p.Id,
+			&p.ID,
 			&p.Nome,
 			&p.Categoria,
 			&p.QuantidadeDisponivel,
@@ -62,7 +62,7 @@ func ObterProdutosFiltros(nomeLike string, nomeLikePresente bool, ids []int, ids
 			return nil, err
 		}
 
-		produtos = append(produtos, p)
+		produtos = append(produtos, &p)
 	}
 
 	if err := rows.Err(); err != nil {

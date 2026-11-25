@@ -1,10 +1,10 @@
 # Uso da API
 
-API REST do **MS Principal** (único ponto de entrada do frontend).
+API do **MS Principal**. Pedidos e produtos usam GraphQL; SSE e promoções continuam com endpoints HTTP.
 
-- **Base URL:** `http://localhost:8080/api`
-- **Content-Type:** `application/json`
-- **Erros:** `{"erro": "mensagem"}`
+- **GraphQL:** `http://localhost:8080/api/graphql`
+- **SSE e promoções:** base URL `http://localhost:8080/api`
+- **Content-Type do GraphQL:** `application/json`
 
 ## Pré-requisitos
 
@@ -24,106 +24,49 @@ RESEND_API_KEY=re_xxxxxxxxxxxx
 
 ---
 
-## Endpoints
+## Operações GraphQL
 
-| Método | Rota                       | Descrição                    | Sucesso |
-|--------|----------------------------|------------------------------|---------|
-| GET    | `/produtos`                | Lista produtos               | 200     |
-| POST   | `/pedidos`                 | Cria pedido                  | 201     |
-| GET    | `/pedidos`                 | Lista pedidos (`?situacao=`) | 200     |
-| DELETE | `/pedidos/{id}`            | Exclui pedido                | 204     |
-| GET    | `/eventos`                 | Stream SSE de status         | 200     |
-| POST   | `/promocoes/interesse`     | Cadastra interesse           | 201     |
-| DELETE | `/promocoes/interesse`     | Cancela interesse            | 200     |
+O endpoint aceita `POST` com um JSON que contém `query` e, opcionalmente, `variables`.
 
----
-
-### GET `/produtos`
+### Consultar produtos e pedidos
 
 ```bash
-curl http://localhost:8080/api/produtos
-```
-
-Resposta `200` (formato definido pelo MS Estoque; exemplo ilustrativo):
-
-```json
-[
-  { "id": 1, "nome": "Notebook", "preco": 3500.0, "quantidade": 10 },
-  { "id": 2, "nome": "Mouse", "preco": 80.0, "quantidade": 50 }
-]
-```
-
----
-
-### POST `/pedidos`
-
-Envio:
-
-```json
-{
-  "itens": [
-    { "produto_id": 1, "quantidade": 2 },
-    { "produto_id": 2, "quantidade": 1 }
-  ]
-}
-```
-
-```bash
-curl -X POST http://localhost:8080/api/pedidos \
+curl -X POST http://localhost:8080/api/graphql \
   -H "Content-Type: application/json" \
-  -d '{"itens":[{"produto_id":1,"quantidade":2},{"produto_id":2,"quantidade":1}]}'
+  -d '{"query":"query { produtos { id nome categoria quantidadeDisponivel } pedidos { id situacao produtos { produtoId quantidade } } }"}'
 ```
 
-Resposta `201`:
-
-```json
-{ "id": 12, "situacao": "CRIADO" }
-```
-
-Erros `400`: sem itens, JSON inválido, `quantidade` < 1, produto inexistente ou item duplicado.
-
-```json
-{ "erro": "pedido sem itens" }
-```
-
----
-
-### GET `/pedidos`
+### Criar pedido
 
 ```bash
-# todos
-curl http://localhost:8080/api/pedidos
-
-# por situação
-curl "http://localhost:8080/api/pedidos?situacao=ENVIADO"
+curl -X POST http://localhost:8080/api/graphql \
+  -H "Content-Type: application/json" \
+  -d '{"query":"mutation { criarPedido(request: { itens: [{ produtoId: 1, quantidade: 2 }, { produtoId: 2, quantidade: 1 }] }) { id situacao } }"}'
 ```
 
-Situações: `CRIADO`, `ESTOQUE_DISPONIVEL`, `ESTOQUE_INDISPONIVEL`, `PAGAMENTO_APROVADO`, `PAGAMENTO_RECUSADO`, `ENVIADO`.
-
-Resposta `200` (exemplo ilustrativo):
+Resposta:
 
 ```json
-[
-  { "id": 12, "situacao": "ENVIADO" },
-  { "id": 13, "situacao": "CRIADO" }
-]
+{"data":{"criarPedido":{"id":12,"situacao":"CRIADO"}}}
 ```
 
-Situação inválida → `400`:
-
-```json
-{ "erro": "situação inválida" }
-```
-
----
-
-### DELETE `/pedidos/{id}`
+### Remover pedido
 
 ```bash
-curl -X DELETE http://localhost:8080/api/pedidos/12 -i
+curl -X POST http://localhost:8080/api/graphql \
+  -H "Content-Type: application/json" \
+  -d '{"query":"mutation { removerPedido(request: { id: 12 }) }"}'
 ```
 
-Resposta `204` (sem corpo). Erros: `400` (id inválido) e `404` (não encontrado).
+Erros de validação e execução aparecem no campo GraphQL `errors`.
+
+## Endpoints HTTP
+
+| Método | Rota | Descrição |
+|---|---|---|
+| GET | `/api/eventos` | Stream SSE de status |
+| POST | `/api/promocoes/interesse` | Cadastra interesse |
+| DELETE | `/api/promocoes/interesse` | Cancela interesse |
 
 ---
 
@@ -149,7 +92,7 @@ data:{"tipo":"pagamento.aprovado","pedido_id":12,"situacao":"PAGAMENTO_APROVADO"
 | `pedido.enviado`       | `ENVIADO`              |
 
 - Todos os clientes conectados recebem todos os eventos.
-- Eventos enviados sem ninguém conectado são perdidos: ao abrir ou reconectar, o frontend atualiza a lista com `GET /pedidos`.
+- Eventos enviados sem ninguém conectado são perdidos: ao abrir ou reconectar, o frontend pode atualizar a lista com a query GraphQL `pedidos`.
 - Linhas `: conectado` e `: ping` são comentários SSE (só aparecem no curl).
 
 Exemplo no navegador:
@@ -212,8 +155,8 @@ Erro `400` se faltar o `email`:
 
 ## Dica (Windows)
 
-No CMD/PowerShell as aspas simples não funcionam no `curl`. Salve o JSON em um arquivo e use:
+No CMD/PowerShell as aspas simples não funcionam no `curl`. Salve o corpo JSON da operação GraphQL em um arquivo e use:
 
 ```bash
-curl -X POST http://localhost:8080/api/pedidos -H "Content-Type: application/json" -d @pedido.json
+curl -X POST http://localhost:8080/api/graphql -H "Content-Type: application/json" -d @consulta.json
 ```

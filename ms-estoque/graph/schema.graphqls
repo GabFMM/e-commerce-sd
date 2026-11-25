@@ -1,0 +1,13 @@
+type Produto {
+  id: Int!
+  nome: String!
+  categoria: String!
+  quantidadeDisponivel: Int!
+}
+
+type Query {
+  produtos(
+    ids: [Int!]
+    nomeLike: String
+  ): [Produto!]!
+}

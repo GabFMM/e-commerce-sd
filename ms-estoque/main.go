@@ -5,12 +5,12 @@ import (
 	"crypto/ed25519"
 	"e-commerce-sd/data"
 	"e-commerce-sd/ms-estoque/dto"
+	"e-commerce-sd/ms-estoque/graph"
 	"e-commerce-sd/ms-estoque/service"
 	"e-commerce-sd/seguranca"
 	"encoding/json"
 	"errors"
 	"log"
-	"strconv"
 	"time"
 
 	"net/http"
@@ -18,6 +18,7 @@ import (
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
+	gqlhandler "github.com/99designs/gqlgen/graphql/handler"
 	"github.com/gin-gonic/gin"
 )
 
@@ -42,47 +43,15 @@ func printOnError(err error, msg string) {
 func montarRouterEstoque() *gin.Engine {
 	r := gin.Default()
 
-	// GET /produtos -> produtos com saldo disponível (consumido pelo MS Principal)
-	r.GET("/produtos", func(c *gin.Context) {
-		nomeLike, nomeLikePresente := c.GetQuery("nome_like")
-		idsQuery := c.QueryArray("id")
-
-		ids := make([]int, 0, len(idsQuery))
-
-		for _, idQuery := range idsQuery {
-			id, err := strconv.Atoi(idQuery)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{
-					"erro": "id inválido: " + idQuery,
-				})
-				return
-			}
-
-			ids = append(ids, id)
-		}
-
-		produtos, err := service.ObterProdutosFiltros(
-			nomeLike,
-			nomeLikePresente,
-			ids,
-			len(idsQuery) > 0,
-		)
-		
-		if err != nil {
-			log.Printf("[ERRO-MS-ESTOQUE] Falha ao consultar produtos: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"erro": "não foi possível consultar os produtos",
-			})
-			return
-		}
-
-		c.JSON(http.StatusOK, produtos)
-	})
+	graphqlServer := gqlhandler.NewDefaultServer(
+		graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}),
+	)
+	r.POST("/graphql", gin.WrapH(graphqlServer))
 
 	return r
 }
 
-// Sobe a API REST em uma goroutine. Endereço padrão ":8081" (troque com ESTOQUE_ADDR).
+// Sobe a API GraphQL em uma goroutine. Endereço padrão ":8081" (troque com ESTOQUE_ADDR).
 func iniciarAPIEstoque() {
 	addr := os.Getenv("ESTOQUE_ADDR")
 	if addr == "" {
@@ -95,7 +64,7 @@ func iniciarAPIEstoque() {
 	}
 
 	go func() {
-		log.Printf("[INFO-MS-ESTOQUE] API REST escutando em %s", srv.Addr)
+		log.Printf("[INFO-MS-ESTOQUE] API GraphQL escutando em %s", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Panicf("[ERRO-MS-ESTOQUE] Erro no servidor HTTP: %s", err)
 		}
@@ -132,10 +101,10 @@ func main() {
 	)
 	failOnError(err, "[ERRO-MS-ESTOQUE] Falha ao registrar na fila do consumidor")
 
-	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("ms-estoque/chaves/")
+	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("ms-estoque/.chaves/")
 	failOnError(err, "[ERRO-MS-ESTOQUE] Não foi possível carregar as chaves públicas")
 
-	chavePrivada, err := seguranca.CarregarChavePrivada("ms-estoque/chaves/estoque_private.pem")
+	chavePrivada, err := seguranca.CarregarChavePrivada("ms-estoque/.chaves/estoque_private.pem")
 	failOnError(err, "[ERRO-MS-ESTOQUE] Não foi possível carregar chave privada")
 
 	var forever chan struct{}
@@ -160,7 +129,7 @@ func main() {
 		}
 	}()
 
-	// API REST (GET /produtos) consumida pelo MS Principal
+	// GraphQL consumida pelo MS Principal
 	iniciarAPIEstoque()
 
 	log.Printf(" [*] Waiting for messages. To exit press CTRL+C")

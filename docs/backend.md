@@ -8,7 +8,7 @@ O sistema é composto por cinco microsserviços em Go, um mock de pagamento, tr�
 
 | Canal | Onde é usado |
 |---|---|
-| **REST** | Frontend → Principal; Principal → Estoque (lista de produtos) |
+| **GraphQL** | Frontend → Principal; Principal → Estoque (lista de produtos) |
 | **RabbitMQ** (eventos assíncronos) | Entre todos os microsserviços (fluxo do pedido e promoções) |
 | **Webhook HTTP** | Mock de pagamento → MS Pagamento |
 | **SSE** | Principal → Frontend (mudanças de situação em tempo real) |
@@ -27,9 +27,9 @@ flowchart LR
     DE[("db_estoque :5433")]
     DM[("db_promocoes :5434")]
 
-    FE -- "REST e SSE" --> PR
+    FE -- "GraphQL, REST e SSE" --> PR
     FE -- "checkout" --> MK
-    PR -- "REST produtos" --> ES
+    PR -- "GraphQL produtos" --> ES
     MK -- "webhook" --> PG
     PG -- "cobranca" --> MK
     PR <--> MQ
@@ -42,15 +42,15 @@ flowchart LR
     PM --- DM
 ```
 
-Princípio de projeto: **cada serviço tem o seu próprio banco** (o Pagamento e a Entrega não têm). Um serviço nunca lê o banco de outro; a troca de informação é por REST ou por evento.
+Princípio de projeto: **cada serviço tem o seu próprio banco** (o Pagamento e a Entrega não têm). Um serviço nunca lê o banco de outro; a troca de informação é por GraphQL, REST ou evento.
 
 ## 2. Portas e endereços
 
 | Componente | Endereço | Observação |
 |---|---|---|
 | Frontend | `localhost:4200` | `ng serve` |
-| MS Principal | `:8080` | API REST em `/api` e SSE em `/api/eventos` |
-| MS Estoque | `:8081` | API REST interna (`ESTOQUE_ADDR` altera) |
+| MS Principal | `:8080` | GraphQL em `/api/graphql`, SSE em `/api/eventos` e REST para promoções |
+| MS Estoque | `:8081` | GraphQL em `/graphql` (`ESTOQUE_ADDR` altera) |
 | Mock de pagamento | `:8082` | `MOCK_PAGAMENTO_ADDR` altera |
 | MS Pagamento (webhook) | `:8083` | `PAGAMENTO_ADDR` altera |
 | MS Entrega e MS Promoções | sem HTTP | só RabbitMQ (Promoções também chama a API externa de e-mail) |
@@ -63,22 +63,22 @@ Princípio de projeto: **cada serviço tem o seu próprio banco** (o Pagamento e
 
 **Papel:** ponto de entrada do frontend, dono dos pedidos e emissor do SSE.
 
-**API REST** (resumo; detalhes em `USOAPI.md`):
+**GraphQL** (`POST /api/graphql`):
 
-| Método | Rota | Descrição |
-|---|---|---|
-| GET | `/api/produtos` | Repassa a consulta ao MS Estoque |
-| POST | `/api/pedidos` | Cria pedido |
-| GET | `/api/pedidos` | Lista pedidos (filtro `?situacao=`) |
-| DELETE | `/api/pedidos/{id}` | Exclui pedido |
-| GET | `/api/eventos` | Stream SSE |
-| POST / DELETE | `/api/promocoes/interesse` | Cadastra / cancela interesse em promoções |
+| Operação | Descrição |
+|---|---|
+| `produtos(ids, nomeLike)` | Consulta o MS Estoque por GraphQL |
+| `pedidos` | Lista pedidos e seus itens |
+| `criarPedido(request)` | Cria pedido |
+| `removerPedido(request)` | Exclui pedido |
+
+Além do GraphQL, o Principal mantém o stream SSE em `/api/eventos` e os endpoints REST de interesse em promoções.
 
 **Como cada operação funciona:**
 
-- **Criar pedido:** valida o JSON (`itens` obrigatório, `quantidade >= 1`) e, dentro de **uma transação**, insere o pedido (`CRIADO`) e seus itens. Produto inexistente (violação de chave estrangeira) e item duplicado (violação de chave única) viram `400`. Só **depois do commit** publica o evento `pedido.criado` e responde `201`.
-- **Listar produtos:** não usa banco próprio. Chama `GET {ESTOQUE_URL}/produtos` (padrão `http://127.0.0.1:8081`), com timeout de 5 s e limite de 1 MB, valida que a resposta é JSON e a devolve como veio. Se o estoque falhar, responde `500`.
-- **Excluir pedido:** verifica se existe (`404` se não), apaga (os itens saem junto, por `ON DELETE CASCADE`) e publica `pedido.excluido` para o Estoque devolver as reservas. Responde `204`.
+- **Criar pedido:** valida os itens (`produtoId` e `quantidade` positivos) e, dentro de **uma transação**, insere o pedido (`CRIADO`) e seus itens. Produto inexistente (violação de chave estrangeira) e item duplicado (violação de chave única) viram erros GraphQL. Só **depois do commit** publica o evento `pedido.criado`.
+- **Listar produtos:** não usa banco próprio. Envia uma consulta GraphQL para `{ESTOQUE_URL}/graphql` (padrão `http://127.0.0.1:8081/graphql`), com timeout de 5 s e limite de 1 MB. Erros GraphQL e falhas HTTP são reportados como erro da consulta.
+- **Excluir pedido:** apaga o pedido (os itens saem junto, por `ON DELETE CASCADE`) e publica `pedido.excluido` para o Estoque devolver as reservas. Pedido inexistente vira erro GraphQL.
 - **Interesse em promoções:** valida o e-mail, define a ação (`CADASTRAR` ou `CANCELAR`) e publica `interesse.promocao`. O processamento é assíncrono (quem grava é o MS Promoções).
 - **Consumidor de eventos:** lê a fila `principal` e reage a seis eventos (tabela na seção 7). A cada um, atualiza a situação no banco e faz `broadcast` no SSE.
 
@@ -174,7 +174,7 @@ Situações válidas do pedido (restrição `CHECK` nos dois bancos): `CRIADO`, 
 
 ```mermaid
 stateDiagram-v2
-    [*] --> CRIADO: POST /api/pedidos
+    [*] --> CRIADO: mutation criarPedido
     CRIADO --> ESTOQUE_DISPONIVEL: pedido.estoque_ok
     CRIADO --> ESTOQUE_INDISPONIVEL: estoque.indisponivel
     ESTOQUE_DISPONIVEL --> PAGAMENTO_APROVADO: pagamento.aprovado

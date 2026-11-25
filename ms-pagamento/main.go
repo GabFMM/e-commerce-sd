@@ -255,10 +255,10 @@ func main() {
 	failOnError(err, "[ERRO-MS-PAGAMENTO] Erro ao abrir channel de consume")
 	defer consumeCh.Close()
 
-	chavePrivada, err := seguranca.CarregarChavePrivada("ms-pagamento/chaves/pagamento_private.pem")
+	chavePrivada, err := seguranca.CarregarChavePrivada("ms-pagamento/.chaves/pagamento_private.pem")
 	failOnError(err, "[ERRO-MS-PAGAMENTO] Erro ao carregar chave privada")
 
-	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("ms-pagamento/chaves")
+	chavesPublicas, err := seguranca.CarregarTodasChavesPublicas("ms-pagamento/.chaves")
 	failOnError(err, "[ERRO-MS-PAGAMENTO] Erro ao carregar chaves públicas")
 
 	s := &servico{

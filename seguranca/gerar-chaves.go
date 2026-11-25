@@ -38,12 +38,12 @@ var nomesServicos = []string{
 
 // pastaChavesDoServico monta o caminho da pasta "chaves" de um serviço,
 func pastaChavesDoServico(nomeServico string) string {
-	return fmt.Sprintf("ms-%s/chaves", nomeServico)
+	return fmt.Sprintf("ms-%s/.chaves", nomeServico)
 }
 
 func GerarChaves() {
 	// Gera o par de chaves de cada microsserviço, direto dentro
-	// da sua própria pasta "chaves/" (assim a privada já nasce no
+	// da sua própria pasta ".chaves/" (assim a privada já nasce no
 	// lugar certo e nunca precisa ser copiada para lugar nenhum).
 	for _, nome := range nomesServicos {
 		pasta := pastaChavesDoServico(nome)
@@ -54,7 +54,7 @@ func GerarChaves() {
 
 	// Para cada serviço, copia a
 	// chave pública de todos os OUTROS serviços para dentro da sua
-	// pasta "chaves/". Nunca copiamos chave privada.
+	// pasta ".chaves/". Nunca copiamos chave privada.
 	for _, destino := range nomesServicos {
 		pastaDestino := pastaChavesDoServico(destino)
 
@@ -77,7 +77,7 @@ func GerarChaves() {
 	nomeArquivoPromocao := fmt.Sprintf("%s_public.pem", servicoProvedor)
 	caminhoOrigemPromocao := fmt.Sprintf("%s/%s", pastaChavesDoServico(servicoProvedor), nomeArquivoPromocao)
 
-	caminhoDestino := fmt.Sprintf("consumidor/chaves/%s", nomeArquivoPromocao)
+	caminhoDestino := fmt.Sprintf("consumidor/.chaves/%s", nomeArquivoPromocao)
 
 	//Garante que a pasta de destino exista antes de tentar abrir/copiar o arquivo
 	if err := os.MkdirAll(filepath.Dir(caminhoDestino), 0755); err != nil {
