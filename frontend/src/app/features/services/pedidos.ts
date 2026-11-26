@@ -123,7 +123,7 @@ export class PedidosService {
       });
   }
 
-  public obterProdutosPedido(pedidoId: number): Observable<ProdutoDTO[]> {
+  public obterProdutosPedido(pedidoId: number) {
     const pedido = this.pedidos().find(
       pedido => pedido.id === pedidoId
     );

@@ -20,22 +20,42 @@ export class Catalogo implements OnInit {
 
   ngOnInit(): void {
     this.produtosService.obterProdutos().subscribe({
-      next: (produtos) => {
-        this.produtos.set(produtos);
+      next: ({ data, error }) => {
+        if (error) {
+          console.error('Erro GraphQL ao buscar produtos:', error);
+          return;
+        }
+
+        if (data === undefined) {
+          console.error('A API não retornou dados dos produtos.');
+          return;
+        }
+
+        this.produtos.set(data.produtos);
       },
       error: (err) => {
-        console.error(err);
+        console.error('Erro de comunicação ao buscar produtos:', err);
       }
-    })
+    });
   }
 
   protected pesquisarProdutos(): void {
     this.produtosService.obterProdutos(this.nomeProduto).subscribe({
-      next: (produtos) => {
-        this.produtos.set(produtos);
+      next: ({ data, error }) => {
+        if (error) {
+          console.error('Erro GraphQL ao buscar produtos:', error);
+          return;
+        }
+
+        if (data === undefined) {
+          console.error('A API não retornou dados dos produtos.');
+          return;
+        }
+
+        this.produtos.set(data.produtos);
       },
       error: (err) => {
-        console.error(err);
+        console.error('Erro de comunicação ao buscar produtos:', err);
       }
     })
   }

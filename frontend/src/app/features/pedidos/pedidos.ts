@@ -24,12 +24,22 @@ export class Pedidos {
     this.pedidoId = pedidoId;
 
     this.pedidosService.obterProdutosPedido(pedidoId).subscribe({
-      next: (produtos) => {
-        this.produtosPedido.set(produtos);
+      next: ({ data, error }) => {
+        if (error) {
+          console.error('Erro GraphQL ao obter produtos do pedido:', error);
+          return;
+        }
+
+        if (data === undefined) {
+          console.error('A API não retornou dados dos produtos do pedido.');
+          return;
+        }
+
+        this.produtosPedido.set(data.produtos);
         this.mostrarProdutosPedidoSignal.set(true);
       },
       error: (err) => {
-        console.error('Erro ao obter produtos do pedido:', err);
+        console.error('Erro de comunicação ao obter produtos do pedido:', err);
       }
     });
   }
