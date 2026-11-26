@@ -1,6 +1,5 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Apollo, gql } from 'apollo-angular';
 
 export interface ProdutoDTO {
   id: number,
@@ -11,22 +10,25 @@ export interface ProdutoDTO {
 
 @Service()
 export class ProdutosService {
-  private http = inject(HttpClient);
-  private apiUrl = 'http://localhost:8080/api/produtos';
+  private apollo = inject(Apollo);
 
-  public obterProdutos(nome?: string, ids?: number[]): Observable<ProdutoDTO[]> {
-    let params = new HttpParams();
-
-    if(nome && nome.trim()) {
-        params = params.set('nome_like', nome.trim());
-    }
-
-    if (ids && ids.length > 0) {
-      ids.forEach(id => {
-        params = params.append('id', id.toString());
+  public obterProdutos(nome?: string, ids?: number[]) {
+    return this.apollo
+      .query<{ produtos: ProdutoDTO[] }>({
+        query: gql`
+          query Produtos($ids: [Int!], $nomeLike: String){
+            produtos(ids: $ids, nomeLike: $nomeLike) {
+              id
+              nome
+              categoria
+              quantidadeDisponivel
+            }
+          }
+        `,
+        variables: {
+          ids: ids,
+          nomeLike: nome
+        }
       });
-    }
-
-    return this.http.get<ProdutoDTO[]>(`${this.apiUrl}`, { params });
   }
 }

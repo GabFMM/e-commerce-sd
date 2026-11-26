@@ -44,7 +44,6 @@ const CONFIG_EVENTOS: Record<
 @Service()
 export class PedidosService {
   private apollo = inject(Apollo);
-  private apiUrl = 'http://localhost:8080/api/pedidos';
 
   protected produtosService = inject(ProdutosService);
   private toastService = inject(ToastService);
