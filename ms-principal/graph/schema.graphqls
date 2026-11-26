@@ -34,11 +34,6 @@ input CriarPedidoRequest {
   itens: [ItemPedidoInput!]!
 }
 
-type CriarPedidoResponse {
-  id: Int!
-  situacao: Situacao!
-}
-
 input RemoverPedidoRequest {
   id: Int!
 }
@@ -53,6 +48,6 @@ type Query {
 }
 
 type Mutation {
-  criarPedido(request: CriarPedidoRequest!): CriarPedidoResponse!
+  criarPedido(request: CriarPedidoRequest!): Boolean!
   removerPedido(request: RemoverPedidoRequest!): Boolean!
 }

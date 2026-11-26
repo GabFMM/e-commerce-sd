@@ -41,13 +41,13 @@ curl -X POST http://localhost:8080/api/graphql \
 ```bash
 curl -X POST http://localhost:8080/api/graphql \
   -H "Content-Type: application/json" \
-  -d '{"query":"mutation { criarPedido(request: { itens: [{ produtoId: 1, quantidade: 2 }, { produtoId: 2, quantidade: 1 }] }) { id situacao } }"}'
+  -d '{"query":"mutation { criarPedido(request: { itens: [{ produtoId: 1, quantidade: 2 }, { produtoId: 2, quantidade: 1 }] }) }"}'
 ```
 
 Resposta:
 
 ```json
-{"data":{"criarPedido":{"id":12,"situacao":"CRIADO"}}}
+{"data":{"criarPedido":true}}
 ```
 
 ### Remover pedido

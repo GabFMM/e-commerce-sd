@@ -13,11 +13,6 @@ type CriarPedidoRequest struct {
 	Itens []*ItemPedidoInput `json:"itens"`
 }
 
-type CriarPedidoResponse struct {
-	ID       int32    `json:"id"`
-	Situacao Situacao `json:"situacao"`
-}
-
 type ItemPedido struct {
 	ProdutoID  int32 `json:"produtoId"`
 	Quantidade int32 `json:"quantidade"`

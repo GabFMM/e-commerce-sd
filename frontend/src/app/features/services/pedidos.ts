@@ -1,9 +1,9 @@
-import { HttpClient } from '@angular/common/http';
 import { inject, Service, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ProdutoDTO, ProdutosService } from './produtos';
 import { ProdutoPronto } from './carrinho';
 import { ToastService, TipoToast } from './toast';
+import { Apollo, gql } from 'apollo-angular';
 
 export interface PedidoResponse {
   id: number;
@@ -43,7 +43,7 @@ const CONFIG_EVENTOS: Record<
 
 @Service()
 export class PedidosService {
-  private http = inject(HttpClient);
+  private apollo = inject(Apollo);
   private apiUrl = 'http://localhost:8080/api/pedidos';
 
   protected produtosService = inject(ProdutosService);
@@ -57,17 +57,41 @@ export class PedidosService {
     this.recarregarPedidos();
   }
 
-  private obterPedidos(): Observable<PedidoResponse[]> {
-    return this.http.get<PedidoResponse[]>(`${this.apiUrl}`);
+  private obterPedidos() {
+    return this.apollo
+      .query<{ pedidos: PedidoResponse[] }>({
+        query: gql`
+          {
+            pedidos {
+              id
+              situacao
+              produtos {
+                produtoId
+                quantidade
+              }
+            }
+          }
+        `
+      });
   }
 
   public recarregarPedidos(): void {
     this.obterPedidos().subscribe({
-      next: (p) => {
-        this.pedidos.set(p);
+      next: ({ data, error }) => {
+        if (error) {
+          console.error('Erro GraphQL ao buscar pedidos:', error);
+          return;
+        }
+
+        if (data === undefined) {
+          console.error('A API não retornou dados dos pedidos.');
+          return;
+        }
+
+        this.pedidos.set(data.pedidos);
       },
-      error: (err) => {
-        console.error(err);
+      error: (error) => {
+        console.error(error);
       }
     });
   }
@@ -76,7 +100,7 @@ export class PedidosService {
     return this.pedidos();
   }
 
-  public criarPedido(produtosProntos: ProdutoPronto[]): Observable<void> {
+  public criarPedido(produtosProntos: ProdutoPronto[]) {
     const itens: Item[] = produtosProntos.map(
       produtoPronto =>
         ({
@@ -85,12 +109,19 @@ export class PedidosService {
         })
     );
 
-    const pedido: CriarPedidoRequest = { itens };
+    const request: CriarPedidoRequest = { itens };
 
-    return this.http.post<void>(
-      `${this.apiUrl}`,
-      pedido
-    );
+    return this.apollo
+      .mutate<{ criarPedido: boolean }>({
+        mutation: gql`
+          mutation CriarPedido($request: CriarPedidoRequest!){
+            criarPedido(request: $request)
+          }
+        `,
+        variables: {
+          request: request
+        }
+      });
   }
 
   public obterProdutosPedido(pedidoId: number): Observable<ProdutoDTO[]> {
@@ -121,14 +152,35 @@ export class PedidosService {
   }
 
   public removerPedido(pedidoId: number): void {
-    this.http.delete(`${this.apiUrl}/${pedidoId}`).subscribe({
-      next: () => {
-        this.pedidos.update(pedidos => pedidos.filter(pedido => pedido.id !== pedidoId));
-      },
-      error: (err) => {
-        console.error(err);
-      }
-    });
+    this.apollo
+      .mutate<{ removerPedido: boolean }>({
+        mutation: gql`
+          mutation RemoverPedido($request: RemoverPedidoRequest!){
+            removerPedido(request: $request)
+          }
+        `,
+        variables: {
+          request: { id: pedidoId }
+        }
+      })
+      .subscribe({
+        next: ({ data, error }) => {
+          if (data === undefined) {
+            console.error('A API não retornou dados.');
+            return;
+          }
+
+          if (!data.removerPedido) {
+            console.error('Não foi possível remover o pedido.');
+            return;
+          }
+
+          this.pedidos.update(pedidos => pedidos.filter(pedido => pedido.id !== pedidoId));
+        },
+        error: (error) => {
+          console.error(error);
+        }
+      });
   }
 
   public conectarSSE(): void {

@@ -16,9 +16,9 @@ import (
 )
 
 // CriarPedido is the resolver for the criarPedido field.
-func (r *mutationResolver) CriarPedido(ctx context.Context, request model.CriarPedidoRequest) (*model.CriarPedidoResponse, error) {
+func (r *mutationResolver) CriarPedido(ctx context.Context, request model.CriarPedidoRequest) (bool, error) {
 	if r.PublicarPedidoCriado == nil {
-		return nil, errors.New("publicador do evento pedido.criado não configurado")
+		return false, errors.New("publicador do evento pedido.criado não configurado")
 	}
 
 	id, err := service.CriarPedidoComItens(request.Itens)
@@ -28,9 +28,9 @@ func (r *mutationResolver) CriarPedido(ctx context.Context, request model.CriarP
 			errors.Is(err, service.ErrItemInvalido),
 			errors.Is(err, service.ErrProdutoInexistente),
 			errors.Is(err, service.ErrItemDuplicado):
-			return nil, err
+			return false, err
 		default:
-			return nil, errors.New("não foi possível criar o pedido")
+			return false, errors.New("não foi possível criar o pedido")
 		}
 	}
 
@@ -49,10 +49,7 @@ func (r *mutationResolver) CriarPedido(ctx context.Context, request model.CriarP
 		log.Printf("[ERRO-MS-PRINCIPAL] Pedido criado, mas falhou ao publicar pedido.criado: %v", err)
 	}
 
-	return &model.CriarPedidoResponse{
-		ID:       int32(id),
-		Situacao: model.SituacaoCriado,
-	}, nil
+	return true, nil
 }
 
 // RemoverPedido is the resolver for the removerPedido field.
@@ -111,18 +108,3 @@ type (
 	mutationResolver struct{ *Resolver }
 	queryResolver    struct{ *Resolver }
 )
-
-// !!! WARNING !!!
-// The code below was going to be deleted when updating resolvers. It has been copied here so you have
-// one last chance to move it out of harms way if you want. There are two reasons this happens:
-//  - When renaming or deleting a resolver the old code will be put in here. You can safely delete
-//    it when you're done.
-//  - You have helper methods in this file. Move them out to keep these resolver files clean.
-/*
-	func (r *queryResolver) Pedido(ctx context.Context, id int32) (*model.Pedido, error) {
-	\
-}
-
-// Mutation returns MutationResolver implementation.
-func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
-*/

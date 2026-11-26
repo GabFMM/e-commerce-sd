@@ -37,11 +37,6 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
-	CriarPedidoResponse struct {
-		ID       func(childComplexity int) int
-		Situacao func(childComplexity int) int
-	}
-
 	ItemPedido struct {
 		ProdutoID  func(childComplexity int) int
 		Quantidade func(childComplexity int) int
@@ -76,7 +71,7 @@ type ComplexityRoot struct {
 // region    ************************** generated!.gotpl **************************
 
 type MutationResolver interface {
-	CriarPedido(ctx context.Context, request model.CriarPedidoRequest) (*model.CriarPedidoResponse, error)
+	CriarPedido(ctx context.Context, request model.CriarPedidoRequest) (bool, error)
 	RemoverPedido(ctx context.Context, request model.RemoverPedidoRequest) (bool, error)
 }
 type QueryResolver interface {
@@ -101,19 +96,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	ec := newExecutionContext(nil, e, nil)
 	_ = ec
 	switch typeName + "." + field {
-
-	case "CriarPedidoResponse.id":
-		if e.ComplexityRoot.CriarPedidoResponse.ID == nil {
-			break
-		}
-
-		return e.ComplexityRoot.CriarPedidoResponse.ID(childComplexity), true
-	case "CriarPedidoResponse.situacao":
-		if e.ComplexityRoot.CriarPedidoResponse.Situacao == nil {
-			break
-		}
-
-		return e.ComplexityRoot.CriarPedidoResponse.Situacao(childComplexity), true
 
 	case "ItemPedido.produtoId":
 		if e.ComplexityRoot.ItemPedido.ProdutoID == nil {
@@ -319,16 +301,6 @@ var parsedSchema = gqlparser.MustLoadSchema(sources...)
 // childFields_* functions provide shared child field context lookups.
 // Each function is generated once per unique object type, deduplicating the
 // switch statements that were previously inlined in every fieldContext_* function.
-
-func (ec *executionContext) childFields_CriarPedidoResponse(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-	switch field.Name {
-	case "id":
-		return ec.fieldContext_CriarPedidoResponse_id(ctx, field)
-	case "situacao":
-		return ec.fieldContext_CriarPedidoResponse_situacao(ctx, field)
-	}
-	return nil, fmt.Errorf("no field named %q was found under type CriarPedidoResponse", field.Name)
-}
 
 func (ec *executionContext) childFields_ItemPedido(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
@@ -620,52 +592,6 @@ func (ec *executionContext) field___Type_inputFields_args(ctx context.Context, r
 
 // region    **************************** field.gotpl *****************************
 
-func (ec *executionContext) _CriarPedidoResponse_id(ctx context.Context, field graphql.CollectedField, obj *model.CriarPedidoResponse) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_CriarPedidoResponse_id(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			return obj.ID, nil
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v int32) graphql.Marshaler {
-			return ec.marshalNInt2int32(ctx, selections, v)
-		},
-		true,
-		true,
-	)
-}
-func (ec *executionContext) fieldContext_CriarPedidoResponse_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("CriarPedidoResponse", field, false, false, "Int")
-}
-
-func (ec *executionContext) _CriarPedidoResponse_situacao(ctx context.Context, field graphql.CollectedField, obj *model.CriarPedidoResponse) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_CriarPedidoResponse_situacao(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			return obj.Situacao, nil
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v model.Situacao) graphql.Marshaler {
-			return ec.marshalNSituacao2eᚑcommerceᚑsdᚋmsᚑprincipalᚋgraphᚋmodelᚐSituacao(ctx, selections, v)
-		},
-		true,
-		true,
-	)
-}
-func (ec *executionContext) fieldContext_CriarPedidoResponse_situacao(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("CriarPedidoResponse", field, false, false, "Situacao")
-}
-
 func (ec *executionContext) _ItemPedido_produtoId(ctx context.Context, field graphql.CollectedField, obj *model.ItemPedido) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -725,8 +651,8 @@ func (ec *executionContext) _Mutation_criarPedido(ctx context.Context, field gra
 			return ec.Resolvers.Mutation().CriarPedido(ctx, fc.Args["request"].(model.CriarPedidoRequest))
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v *model.CriarPedidoResponse) graphql.Marshaler {
-			return ec.marshalNCriarPedidoResponse2ᚖeᚑcommerceᚑsdᚋmsᚑprincipalᚋgraphᚋmodelᚐCriarPedidoResponse(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
 		},
 		true,
 		true,
@@ -739,7 +665,7 @@ func (ec *executionContext) fieldContext_Mutation_criarPedido(ctx context.Contex
 		IsMethod:   true,
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.childFields_CriarPedidoResponse(ctx, field)
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	defer func() {
@@ -2336,44 +2262,6 @@ func UnmarshalRemoverPedidoRequest(ctx context.Context, raw any) (model.RemoverP
 
 // region    **************************** object.gotpl ****************************
 
-var criarPedidoResponseImplementors = []string{"CriarPedidoResponse"}
-
-func (ec *executionContext) _CriarPedidoResponse(ctx context.Context, sel ast.SelectionSet, obj *model.CriarPedidoResponse) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, criarPedidoResponseImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := graphql.NewDeferredGroup(ctx)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("CriarPedidoResponse")
-		case "id":
-			out.Values[i] = ec._CriarPedidoResponse_id(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "situacao":
-			out.Values[i] = ec._CriarPedidoResponse_situacao(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	if n := len(deferred.Defers); n > 0 {
-		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
-		ec.ProcessDeferredGroup(deferred)
-	}
-
-	return out
-}
-
 var itemPedidoImplementors = []string{"ItemPedido"}
 
 func (ec *executionContext) _ItemPedido(ctx context.Context, sel ast.SelectionSet, obj *model.ItemPedido) graphql.Marshaler {
@@ -2994,14 +2882,6 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 func (ec *executionContext) unmarshalNCriarPedidoRequest2eᚑcommerceᚑsdᚋmsᚑprincipalᚋgraphᚋmodelᚐCriarPedidoRequest(ctx context.Context, v any) (model.CriarPedidoRequest, error) {
 	res, err := ec.unmarshalInputCriarPedidoRequest(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalNCriarPedidoResponse2ᚖeᚑcommerceᚑsdᚋmsᚑprincipalᚋgraphᚋmodelᚐCriarPedidoResponse(ctx context.Context, sel ast.SelectionSet, v *model.CriarPedidoResponse) graphql.Marshaler {
-	if v == nil {
-		graphql.AddInvalidNullError(ctx, "CriarPedidoResponse!")
-		return graphql.Null
-	}
-	return ec._CriarPedidoResponse(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNInt2int32(ctx context.Context, v any) (int32, error) {
