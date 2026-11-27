@@ -17,9 +17,6 @@ export class Pedidos {
   protected pedidoId: number | null = null;
   protected produtosPedido = signal<ProdutoDTO[]>([]);
 
-  // A conexão SSE agora é aberta uma única vez no App (app.ts),
-  // por isso este componente não conecta nem desconecta mais.
-
   protected mostrarProdutosPedido(pedidoId: number): void {
     this.pedidoId = pedidoId;
 

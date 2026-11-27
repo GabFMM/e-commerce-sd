@@ -61,7 +61,7 @@ func criarCobranca(c *gin.Context) {
 	log.Printf("[MOCK] Cobrança criada para o pedido %d", req.PedidoID)
 
 	c.JSON(http.StatusCreated, gin.H{
-		"checkout_url": fmt.Sprintf("%s/%d", checkoutBaseURL, 77),
+		"checkout_url": fmt.Sprintf("%s/%d", checkoutBaseURL, req.PedidoID),
 	})
 }
 

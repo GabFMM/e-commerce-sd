@@ -1,15 +1,13 @@
 import { inject, Service, signal } from '@angular/core';
-import { Observable } from 'rxjs';
-import { ProdutoDTO, ProdutosService } from './produtos';
 import { ProdutoPronto } from './carrinho';
 import { ToastService, TipoToast } from './toast';
 import { Apollo, gql } from 'apollo-angular';
+import { ProdutosService } from './produtos';
 
 export interface PedidoResponse {
   id: number;
   situacao: string;
-  // Relaciona cada produto.id com sua quantidade desejada
-  produtos: Record<number, number>;
+  produtos: Item[];
 }
 
 export interface CriarPedidoRequest {
@@ -17,7 +15,7 @@ export interface CriarPedidoRequest {
 }
 
 interface Item {
-  produto_id: number;
+  produtoId: number;
   quantidade: number;
 }
 
@@ -70,7 +68,8 @@ export class PedidosService {
               }
             }
           }
-        `
+        `,
+        fetchPolicy: 'network-only'
       });
   }
 
@@ -103,7 +102,7 @@ export class PedidosService {
     const itens: Item[] = produtosProntos.map(
       produtoPronto =>
         ({
-          produto_id: produtoPronto.produtoId,
+          produtoId: produtoPronto.produtoId,
           quantidade: produtoPronto.quantidade
         })
     );
@@ -128,8 +127,7 @@ export class PedidosService {
       pedido => pedido.id === pedidoId
     );
 
-    const itens: Record<number, number> = pedido!.produtos;
-    const produtosIds = Object.keys(itens).map(Number);
+    const produtosIds = pedido!.produtos.map(item => item.produtoId);
 
     return this.produtosService.obterProdutos(
       undefined,
@@ -138,16 +136,10 @@ export class PedidosService {
   }
 
   public obterQuantidadeRequisitada(pedidoId: number, produtoId: number): number {
-    const produtos = this.pedidos().find(pedido => pedido.id === pedidoId)!.produtos;
+    const pedido = this.pedidos().find(pedido => pedido.id === pedidoId);
 
-    for (const [id, quantidade] of Object.entries(produtos)) {
-      if (Number(id) === produtoId) {
-        return quantidade;
-      }
-    }
-
-    // Erro: nunca ocorre
-    return -1;
+    const item = pedido?.produtos.find(p => p.produtoId === produtoId);
+    return item?.quantidade ?? -1;
   }
 
   public removerPedido(pedidoId: number): void {
@@ -199,13 +191,18 @@ export class PedidosService {
     this.eventSource.addEventListener('message', (e: MessageEvent) => {
       const ev: EventoPedido = JSON.parse(e.data);
 
-      // Atualiza a situação do pedido na lista
-      this.pedidos.update(pedidos =>
-        pedidos.map(p =>
-          p.id === ev.pedido_id ? { ...p, situacao: ev.situacao } : p
-        )
-      );
-
+      // Significa que um pedido foi criado
+      if (ev.tipo === "pedido.estoque_ok") {
+        this.recarregarPedidos();
+      }
+      // Atualiza a situação do pedido existente na lista em memória
+      else {
+        this.pedidos.update(pedidos =>
+          pedidos.map(p =>
+            p.id === ev.pedido_id ? { ...p, situacao: ev.situacao } : p
+          )
+        );
+      }
       this.notificar(ev);
     });
 

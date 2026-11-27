@@ -28,7 +28,8 @@ export class ProdutosService {
         variables: {
           ids: ids,
           nomeLike: nome
-        }
+        },
+        fetchPolicy: 'network-only'
       });
   }
 }
